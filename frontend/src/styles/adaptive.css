@@ -1,0 +1,71 @@
+/* BintangAi Adaptive UI - Support for Blind, Deaf, and Mute Students */
+
+/* 1. BLIND (Tunanetra) - High Contrast & Font Scaling */
+[data-disability="tunanetra"] {
+    --bg-primary: #000000;
+    --text-primary: #FFFFFF;
+    --accent-color: #FFFF00; /* Yellow for high visibility */
+}
+
+[data-disability="tunanetra"] body {
+    background-color: #000 !important;
+    color: #fff !important;
+}
+
+[data-disability="tunanetra"] .bg-white,
+[data-disability="tunanetra"] .bg-slate-50,
+[data-disability="tunanetra"] header,
+[data-disability="tunanetra"] aside {
+    background-color: #000 !important;
+    border-color: #FFFF00 !important;
+}
+
+[data-disability="tunanetra"] button {
+    border: 3px solid #FFFF00 !important;
+    background-color: #000 !important;
+    color: #FFFF00 !important;
+    font-weight: 900 !important;
+}
+
+[data-disability="tunanetra"] h1,
+[data-disability="tunanetra"] h2,
+[data-disability="tunanetra"] h3,
+[data-disability="tunanetra"] p,
+[data-disability="tunanetra"] span {
+    color: #fff !important;
+}
+
+/* 2. DEAF (Tunarungu) - Visual Feedback & Flash */
+[data-disability="tunarungu"] .visual-timer-flash {
+    animation: flash-red 1s infinite;
+}
+
+@keyframes flash-red {
+    0% { background-color: transparent; }
+    50% { background-color: rgba(255, 0, 0, 0.2); }
+    100% { background-color: transparent; }
+}
+
+[data-disability="tunarungu"] .voice-feedback-icon {
+    display: none !important;
+}
+
+/* 3. MUTE (Tunawicara) - AAC Board Optimization */
+[data-disability="tunawicara"] .aac-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+}
+
+/* 4. DYSLEXIA - OpenDyslexic Font Simulation */
+[data-disability="disleksia"] body {
+    font-family: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
+}
+
+/* PWA Styling */
+@media all and (display-mode: standalone) {
+    body {
+        -webkit-user-select: none;
+        user-select: none;
+    }
+}

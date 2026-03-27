@@ -1,0 +1,10 @@
+{
+  "name": "bintangai-backend",
+  "version": "1.0.0",
+  "description": "Supabase Backend Configuration",
+  "scripts": {
+    "deploy:ai-tutor": "supabase functions deploy ai-tutor --no-verify-jwt",
+    "deploy:summarize": "supabase functions deploy summarize --no-verify-jwt",
+    "set:secrets": "supabase secrets set GROQ_API_KEY=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"
+  }
+}
