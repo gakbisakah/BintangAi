@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
+import { useAccessibilityStore } from '../../store/accessibilityStore';
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -22,6 +23,7 @@ const Auth = () => {
 
   const navigate = useNavigate();
   const { setUser, setProfile, fetchProfile } = useAuthStore();
+  const { setModeFromProfile } = useAccessibilityStore();
 
   useEffect(() => {
     setMessage(null);
@@ -82,8 +84,10 @@ const Auth = () => {
                 xp: 0
             };
             setProfile(fallbackProfile);
+            setModeFromProfile(fallbackProfile);
             navigate(fallbackProfile.role === 'guru' ? '/teacher/dashboard' : fallbackProfile.role === 'ortu' ? '/parent/dashboard' : '/student/dashboard');
         } else {
+            setModeFromProfile(profileData);
             const targetPath = profileData.role === 'guru' ? '/teacher/dashboard' :
                                profileData.role === 'ortu' ? '/parent/dashboard' :
                                '/student/dashboard';

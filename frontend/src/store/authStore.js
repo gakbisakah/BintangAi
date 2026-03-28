@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { supabase } from '../lib/supabase'
+import { useAccessibilityStore } from './accessibilityStore'
 
 export const useAuthStore = create(
   persist(
@@ -36,6 +37,8 @@ export const useAuthStore = create(
             (payload) => {
               console.log('Realtime profile update:', payload.new);
               set({ profile: payload.new });
+              // Update accessibility mode if profile changed
+              useAccessibilityStore.getState().setModeFromProfile(payload.new);
             }
           )
           .subscribe();
@@ -59,7 +62,9 @@ export const useAuthStore = create(
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('*')
-            .eq('id', userId)
+            .eq(
+              'id', userId
+            )
             .single();
 
           if (profileError) throw profileError;
@@ -67,6 +72,9 @@ export const useAuthStore = create(
           if (profileData) {
             // Jalankan subscription realtime setelah profile ditemukan
             get().subscribeToProfile(userId);
+
+            // Sync accessibility store
+            useAccessibilityStore.getState().setModeFromProfile(profileData);
 
             set({ profile: profileData, loading: false });
             return profileData;
@@ -97,6 +105,10 @@ export const useAuthStore = create(
 
       logout: async () => {
         get().unsubscribeFromProfile();
+
+        // RESET ACCESSIBILITY BEFORE LOGOUT
+        useAccessibilityStore.getState().reset();
+
         await supabase.auth.signOut()
         set({ user: null, profile: null })
       }

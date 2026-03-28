@@ -1,16 +1,24 @@
+// pages/student/Quiz.jsx — FULL FIXED ACCESSIBILITY VERSION
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
 import ConfettiEffect from '../../components/ConfettiEffect';
+import GestureCameraOverlay from '../../components/GestureCameraOverlay';
 import { useVoice } from '../../hooks/useVoice';
+import { useGlobalVoiceNav } from '../../hooks/useGlobalVoiceNav';
+import { useGestureControl } from '../../hooks/useGestureControl';
+import { useSubtitle } from '../../components/DeafSubtitleOverlay';
+import { useAccessibility } from '../../hooks/useAccessibility';
 
 const StudentQuiz = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profile, updateXP, fetchProfile } = useAuthStore();
   const { speak } = useVoice();
+  const { showSubtitle } = useSubtitle();
+  const { isBlind, isDeaf, isMute } = useAccessibility();
 
   const [quiz, setQuiz] = useState(null);
   const [questions, setQuestions] = useState([]);
@@ -22,37 +30,170 @@ const StudentQuiz = () => {
   const [showConfetti, setShowConfetti] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
   const [existingResult, setExistingResult] = useState(null);
-  const [timeLeft, setTimeLeft] = useState(60); // Default timer per question
+  const [timeLeft, setTimeLeft] = useState(60);
+  const [markedHard, setMarkedHard] = useState([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [answeredCount, setAnsweredCount] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
 
-  const isBlind = profile?.disability_type === 'tunanetra';
-  const isTunarungu = profile?.disability_type === 'tunarungu';
   const timerRef = useRef(null);
+  const hasAnnouncedRef = useRef(false);
+  const answersRef = useRef({});  // track per-question answer
+
+  const currentQ = questions[currentIndex];
+
+  // Auto read questions for blind
+  useEffect(() => {
+    if (isBlind && currentQ && !finished) {
+      const timer = setTimeout(() => {
+        const optionsText = currentQ.options.map((opt, i) => `Pilihan ${String.fromCharCode(65 + i)}: ${opt}`).join('. ');
+        speak(`Soal ${currentIndex + 1} dari ${questions.length}. ${currentQ.text}. ${optionsText}`);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, currentQ, isBlind, finished, questions.length, speak]);
+
+  // ── TUNANETRA: Extended voice commands ──
+  useGlobalVoiceNav({
+    enabled: isBlind,
+    onCommand: (t, speakFn) => {
+      if (!currentQ) return null;
+
+      if (
+        t.includes('baca soal') ||
+        t.includes('ulangi') ||
+        t.includes('bacakan') ||
+        t.includes('soal berapa')
+      ) {
+        // Trigger manual read if needed, though useEffect handles auto-read
+        const optionsText = currentQ.options.map((opt, i) => `Pilihan ${String.fromCharCode(65 + i)}: ${opt}`).join('. ');
+        speakFn(`Soal ${currentIndex + 1}. ${currentQ.text}. ${optionsText}`);
+        return 'read_question';
+      }
+
+      const answerMap = {
+        'pilih a': 0, 'jawab a': 0, 'pilih jawaban a': 0, 'jawaban a': 0, 'huruf a': 0,
+        'pilih b': 1, 'jawab b': 1, 'pilih jawaban b': 1, 'jawaban b': 1, 'huruf b': 1,
+        'pilih c': 2, 'jawab c': 2, 'pilih jawaban c': 2, 'jawaban b': 2, 'huruf c': 2,
+        'pilih d': 3, 'jawab d': 3, 'pilih jawaban d': 3, 'jawaban d': 3, 'huruf d': 3,
+      };
+      for (const [cmd, idx] of Object.entries(answerMap)) {
+        if (t.includes(cmd)) {
+          if (currentQ.options && idx < currentQ.options.length) {
+            handleAnswer(idx);
+          } else {
+            speakFn(`Pilihan ${String.fromCharCode(65 + idx)} tidak ada di soal ini.`);
+          }
+          return 'answer';
+        }
+      }
+
+      if (t.includes('lanjut') || t.includes('soal berikutnya') || t.includes('next')) {
+        if (selectedAnswer !== null || answersRef.current[currentQ.id] !== undefined) {
+          goNext();
+        } else {
+          speakFn('Pilih jawaban terlebih dahulu sebelum lanjut.');
+        }
+        return 'next';
+      }
+
+      if (t.includes('tandai sulit') || t.includes('tandai') || t.includes('sulit')) {
+        setMarkedHard(prev => [...prev, currentIndex]);
+        speakFn('Soal ditandai sebagai sulit.');
+        return 'mark_hard';
+      }
+
+      if (t.includes('lewati') || t.includes('skip')) {
+        goNext();
+        speakFn('Soal dilewati.');
+        return 'skip';
+      }
+
+      return null;
+    }
+  });
+
+  // ── TUNAWICARA: Gesture answers ──
+  // Perbaikan: Hanya aktifkan gesture control jika user adalah tunawicara (isMute)
+  const {
+    videoRef,
+    canvasRef,
+    isActive: camActive,
+    gestureLabel,
+    lastGesture,
+    confidence,
+    handDetected
+  } = useGestureControl({
+    enabled: isMute,
+    onGesture: (gesture, action, text) => {
+      if (!currentQ || finished) return;
+
+      // Map gesture ke jawaban
+      const gestureToAnswer = {
+        'point_up': 0,      // ☝️ = A
+        'peace': 1,         // ✌️ = B
+        'three_fingers': 2, // 🤘 = C
+        'four_fingers': 3   // 🖖 = D
+      };
+
+      if (gestureToAnswer[gesture] !== undefined && selectedAnswer === null) {
+        const idx = gestureToAnswer[gesture];
+        if (idx < currentQ.options.length) {
+          if (isDeaf) showSubtitle(`${text} dipilih`, 'success');
+          handleAnswer(idx);
+        }
+      }
+
+      if (action === 'next') {
+        if (selectedAnswer !== null) {
+          goNext();
+        } else if (isDeaf) {
+          showSubtitle('Pilih jawaban terlebih dahulu', 'warning');
+        }
+      }
+
+      if (action === 'back') {
+        if (currentIndex > 0) {
+          setCurrentIndex(prev => prev - 1);
+          setSelectedAnswer(null);
+          if (isDeaf) showSubtitle('Kembali ke soal sebelumnya', 'info');
+        }
+      }
+
+      if (action === 'stop' || gesture === 'fist') {
+        finishQuiz();
+        if (isDeaf) showSubtitle('Quiz selesai!', 'success');
+      }
+
+      // Keep additional specific gestures if needed, but primary ones are above
+      if (gesture === 'open_hand' && selectedAnswer === null) {
+        goNext();
+        if (isDeaf) showSubtitle('✋ Soal dilewati', 'info');
+      }
+    }
+  });
 
   useEffect(() => {
-    if (id && profile?.id) {
-      fetchQuizData();
-    }
-
-    const handleKeyDown = (e) => {
-      if (e.key >= '1' && e.key <= '4') {
-        handleAnswer(parseInt(e.key) - 1);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    if (id && profile?.id) fetchQuizData();
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [id, profile?.id]);
 
   useEffect(() => {
-    if (questions.length > 0 && !finished && !alreadyDone && !loading) {
-      readCurrentQuestion();
-      startTimer();
+    if (!loading && quiz && questions.length > 0 && !hasAnnouncedRef.current) {
+      hasAnnouncedRef.current = true;
+      const introText = `${quiz.assignments?.title || 'Quiz'}.`;
+      if (isBlind) {
+        speak(introText);
+      }
+      if (isDeaf) {
+        showSubtitle(introText, 'info');
+      }
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+  }, [loading, quiz, questions, isBlind, isDeaf, speak, showSubtitle]);
+
+  useEffect(() => {
+    if (!finished && !alreadyDone && !loading) startTimer();
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [currentIndex, questions, finished, alreadyDone, loading]);
 
   const startTimer = () => {
@@ -62,52 +203,46 @@ const StudentQuiz = () => {
       setTimeLeft(prev => {
         if (prev <= 1) {
           clearInterval(timerRef.current);
-          handleAnswer(-1); // Time out
+          handleAnswer(-1); // timeout
           return 0;
+        }
+        if (prev === 10) {
+          if (isBlind) speak('Waktu tersisa 10 detik!');
+          if (isDeaf) showSubtitle('⚠️ 10 detik terakhir!', 'warning');
+        }
+        if (prev === 5) {
+          if (isBlind) speak('Lima!');
+          if (isDeaf) showSubtitle('⚠️ 5 detik!', 'warning');
         }
         return prev - 1;
       });
     }, 1000);
   };
 
-  const readCurrentQuestion = () => {
-    if (!isBlind || !questions[currentIndex]) return;
-    const q = questions[currentIndex];
-    const optionsText = q.options.map((opt, i) => `Pilihan ${String.fromCharCode(65 + i)}: ${opt}`).join('. ');
-    const fullText = `Pertanyaan nomor ${currentIndex + 1}. ${q.text}. Waktu kamu 60 detik. Berikut pilihannya. ${optionsText}.`;
-    speak(fullText);
-  };
-
   const fetchQuizData = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('quizzes')
         .select('*, assignments(subject, title)')
         .eq('assignment_id', id)
         .single();
-
-      if (error) throw error;
-
       if (data) {
         setQuiz(data);
-        setQuestions(data.questions);
-
-        const { data: submission } = await supabase
+        setQuestions(data.questions || []);
+        const { data: sub } = await supabase
           .from('submissions')
           .select('*')
           .eq('assignment_id', id)
           .eq('student_id', profile.id)
           .maybeSingle();
-
-        if (submission && (submission.status === 'submitted' || submission.status === 'graded')) {
+        if (sub?.status === 'submitted' || sub?.status === 'graded') {
           setAlreadyDone(true);
-          setExistingResult(submission);
-          if (isBlind) speak(`Kamu sudah mengerjakan kuis ${data.assignments?.title} sebelumnya. Skor kamu adalah ${submission.total_score}.`);
+          setExistingResult(sub);
         }
       }
     } catch (err) {
-      console.error("Fetch quiz error:", err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -118,224 +253,269 @@ const StudentQuiz = () => {
     if (timerRef.current) clearInterval(timerRef.current);
 
     setSelectedAnswer(index);
-    const isCorrect = index === questions[currentIndex].correctIndex;
+    const isCorrect = index !== -1 && index === currentQ.correctIndex;
+
+    if (index === -1) {
+      if (isBlind) speak('Waktu habis untuk soal ini.');
+      if (isDeaf) showSubtitle('⏰ Waktu Habis!', 'error');
+    } else {
+      const choiceLetter = String.fromCharCode(65 + index);
+      if (isBlind) speak(`Jawaban ${choiceLetter} dipilih.`);
+      if (isDeaf) showSubtitle(`Jawaban ${choiceLetter} dipilih`, 'info');
+    }
 
     if (isCorrect) {
       setScore(prev => prev + 1);
-      setShowConfetti(true);
-      if (isBlind) speak("Jawaban kamu benar!");
-      setTimeout(() => setShowConfetti(false), 2000);
-    } else {
-      if (isBlind) {
-        if (index === -1) speak("Waktu habis.");
-        else speak("Jawaban kamu kurang tepat.");
-      }
+      setCorrectCount(prev => prev + 1);
+      if (isBlind) setTimeout(() => speak('Benar!'), 800);
+      if (isDeaf) setTimeout(() => showSubtitle('✅ Jawaban Benar!', 'success'), 800);
+    } else if (index !== -1) {
+      if (isBlind) setTimeout(() => speak('Kurang tepat, lanjut soal berikutnya.'), 800);
+      if (isDeaf) setTimeout(() => showSubtitle('❌ Kurang tepat', 'error'), 800);
     }
 
+    answersRef.current[currentQ.id] = index;
+    setAnsweredCount(prev => prev + 1);
+
     setTimeout(() => {
-      if (currentIndex < questions.length - 1) {
-        setCurrentIndex(prev => prev + 1);
-        setSelectedAnswer(null);
-      } else {
-        finishQuiz();
-      }
-    }, 2500);
+      goNext();
+    }, 2200);
+  };
+
+  const goNext = () => {
+    if (currentIndex < questions.length - 1) {
+      if (isBlind) speak('Soal berikutnya...');
+      setCurrentIndex(prev => prev + 1);
+      setSelectedAnswer(null);
+    } else {
+      finishQuiz();
+    }
   };
 
   const finishQuiz = async () => {
-    if (finished || alreadyDone) return;
+    if (finished || alreadyDone || isSubmitting) return;
+    setIsSubmitting(true);
     setFinished(true);
 
-    const percentage = Math.round((score / questions.length) * 100);
     const xpGained = score * 30;
-
-    if (isBlind) speak(`Kuis selesai! Kamu mendapatkan ${xpGained} XP. Kamu menjawab ${score} dari ${questions.length} soal dengan benar.`);
+    if (isBlind) speak(`Quiz selesai! Kamu menjawab benar ${score} dari ${questions.length} soal. Total ${xpGained} XP.`);
+    if (isDeaf) showSubtitle(`🏆 Quiz Selesai! Benar: ${score}/${questions.length} | XP: +${xpGained}`, 'success');
+    if (isMute) showSubtitle(`🏆 Selesai! ${score}/${questions.length} benar → +${xpGained} XP`, 'success');
 
     try {
-      await supabase.from('quiz_results').insert({
-        quiz_id: quiz.id,
-        student_id: profile.id,
-        score: xpGained,
-        answers: {
-          correct_count: score,
-          total_questions: questions.length,
-          percentage: percentage
-        }
-      });
-
       await supabase.from('submissions').insert({
         assignment_id: id,
         student_id: profile.id,
         status: 'submitted',
         total_score: xpGained,
-        submitted_at: new Date().toISOString()
+        submitted_at: new Date().toISOString(),
       });
-
       await updateXP(xpGained);
-
-      if (percentage < 70) {
-        const currentWeakTopics = profile.weak_topics || [];
-        const newTopic = quiz.assignments?.subject || quiz.assignments?.title || 'Umum';
-        if (!currentWeakTopics.includes(newTopic)) {
-          const updatedTopics = [...currentWeakTopics, newTopic].slice(-5);
-          await supabase.from('profiles').update({ weak_topics: updatedTopics }).eq('id', profile.id);
-        }
-      } else {
-        const currentWeakTopics = profile.weak_topics || [];
-        const topicToRemove = quiz.assignments?.subject || quiz.assignments?.title;
-        if (currentWeakTopics.includes(topicToRemove)) {
-          const updatedTopics = currentWeakTopics.filter(t => t !== topicToRemove);
-          await supabase.from('profiles').update({ weak_topics: updatedTopics }).eq('id', profile.id);
-        }
-      }
-
       await fetchProfile(profile.id);
     } catch (err) {
-      console.error("Error finishing quiz:", err);
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 4000);
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="font-black text-indigo-600 uppercase tracking-widest">Memulai Kuis...</p>
-      </div>
-    </div>
-  );
-
-  if (alreadyDone) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="max-w-md w-full bg-white p-12 rounded-[3rem] shadow-xl border border-slate-100"
-        >
-          <span className="text-8xl mb-8 block">✅</span>
-          <h2 className="text-3xl font-black text-slate-900 mb-4 uppercase">Quiz Sudah Selesai!</h2>
-          <p className="text-slate-500 font-bold mb-8 uppercase text-xs tracking-[0.15em] leading-relaxed">
-            Kamu sudah mengerjakan misi <br/>
-            <span className="text-indigo-600">"{quiz?.assignments?.title || 'QuizKu'}"</span> sebelumnya.
-          </p>
-
-          <div className="bg-indigo-50 p-6 rounded-3xl mb-8">
-            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Skor Kamu</p>
-            <p className="text-5xl font-black text-indigo-600">{existingResult?.total_score || 0}</p>
-          </div>
-
-          <button
-            onClick={() => navigate('/student/dashboard')}
-            onMouseEnter={() => isBlind && speak('Tombol kembali ke beranda berada di bagian bawah tengah layar.')}
-            className="w-full py-5 bg-indigo-600 text-white font-black text-sm rounded-2xl shadow-xl shadow-indigo-100 active:scale-95 transition-all uppercase tracking-widest"
-          >
-            Kembali ke Beranda
-          </button>
-        </motion.div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-black text-slate-400 uppercase tracking-widest">
+        Memuat Quiz...
       </div>
     );
   }
 
-  if (finished) {
+  if (alreadyDone || finished) {
+    const finalScore = finished ? score * 30 : existingResult?.total_score || 0;
+    const finalCorrect = finished ? correctCount : 0;
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center p-6 text-center">
-        <ConfettiEffect active={showConfetti} />
-        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="max-w-md w-full">
-          <span className="text-8xl mb-8 block">🏆</span>
-          <h2 className="text-4xl font-black text-slate-900 mb-4">Kuis Selesai!</h2>
-          <div className="bg-slate-50 p-8 rounded-[3rem] mb-8 border border-slate-100 shadow-sm">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">XP Kamu</p>
-            <p className="text-6xl font-black text-indigo-600">+{score * 30}</p>
-            <p className="mt-4 text-slate-600 font-bold uppercase text-xs tracking-widest">{score} Jawaban Benar dari {questions.length}</p>
-            <p className="mt-1 text-indigo-500 font-black text-lg">{Math.round((score/questions.length)*100)}%</p>
-          </div>
-          <button
-            onClick={() => navigate('/student/dashboard')}
-            onMouseEnter={() => isBlind && speak('Kuis selesai. Klik tombol di bawah ini untuk kembali ke beranda.')}
-            className="w-full py-5 bg-indigo-600 text-white font-black text-xl rounded-[2rem] shadow-xl shadow-indigo-100 active:scale-95 transition-all uppercase tracking-[0.2em]"
-          >
-            Kembali ke Beranda
-          </button>
-        </motion.div>
+        <ConfettiEffect active={showConfetti || finished} />
+        <span className="text-8xl mb-8 block">🏆</span>
+        <h2 className="font-black text-slate-900 text-4xl mb-4">QUIZ SELESAI!</h2>
+        <div className="bg-indigo-50 p-10 rounded-[3rem] mb-6 border border-indigo-100">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+            Total XP
+          </p>
+          <p className="font-black text-indigo-600 text-7xl">+{finalScore}</p>
+          {finished && (
+            <p className="mt-4 font-bold text-slate-600 text-lg">
+              Benar: {finalCorrect} dari {questions.length} soal
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => navigate('/student/dashboard')}
+          onMouseEnter={() => isBlind && speak('Tombol kembali ke beranda')}
+          className="w-full max-w-xs bg-indigo-600 text-white font-black py-6 rounded-[2rem] shadow-xl uppercase tracking-widest hover:bg-indigo-700 transition-all"
+        >
+          Kembali ke Beranda
+        </button>
       </div>
     );
   }
 
-  const currentQ = questions[currentIndex];
+  const timerPercent = (timeLeft / 60) * 100;
+  const isTimeCritical = timeLeft < 10;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-32">
-      <header className="bg-white border-b border-slate-100 px-8 py-6 sticky top-0 z-10 flex justify-between items-center shadow-sm">
+      {/* Perbaikan: Hanya render overlay kamera jika pengguna adalah Tunawicara */}
+      {isMute && (
+        <GestureCameraOverlay
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          isActive={camActive}
+          gestureLabel={gestureLabel}
+          lastGesture={lastGesture}
+          confidence={confidence}
+          handDetected={handDetected}
+        />
+      )}
+
+      {/* TUNANETRA hint bar */}
+      {isBlind && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-indigo-700 text-white text-center py-2 text-xs font-black">
+          🎤 Katakan: "Baca Soal" · "Pilih A/B/C/D" · "Lanjut" · "Tandai Sulit"
+        </div>
+      )}
+
+      {/* TUNAWICARA hint bar */}
+      {isMute && (
+        <div className="fixed top-0 inset-x-0 z-50 bg-purple-700 text-white text-center py-2 text-xs font-black">
+          ✋ Gesture: ☝️=A · ✌️=B · 🤘=C · 🖖=D · ✊=Selesai · ✋=Lewati
+        </div>
+      )}
+
+      <header
+        className={`bg-white border-b border-slate-100 p-8 sticky z-10 flex justify-between items-center shadow-sm ${isBlind || isMute ? 'top-8' : 'top-0'}`}
+      >
         <div className="flex items-center gap-4">
-          <button onClick={() => navigate(-1)} className="text-slate-400 hover:text-indigo-600 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          <button
+            onClick={() => navigate(-1)}
+            onMouseEnter={() => isBlind && speak('Tombol kembali')}
+            className="text-slate-400"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
-          <h1 className="text-xl font-black text-slate-900 uppercase tracking-tight">QuizKu: {quiz?.assignments?.title || 'Latihan'}</h1>
+          <h1
+            className="font-black text-slate-900 uppercase text-xl"
+            onMouseEnter={() => isBlind && speak(quiz?.assignments?.title || 'Quiz')}
+          >
+            {quiz?.assignments?.title || 'Quiz'}
+          </h1>
         </div>
 
-        <div className="flex items-center gap-4">
-            <div className={`px-6 py-2 rounded-2xl border ${timeLeft < 10 ? 'bg-rose-50 border-rose-100 text-rose-600' : 'bg-indigo-50 border-indigo-100 text-indigo-600'}`}>
-                <span className="text-xs font-black uppercase tracking-widest">{timeLeft}s</span>
+        <div className="flex items-center gap-6">
+          <div
+            className={`flex flex-col items-center px-6 py-2 rounded-2xl border-4 transition-colors ${
+              isTimeCritical
+                ? 'bg-rose-50 border-rose-500 text-rose-600 animate-pulse'
+                : 'bg-indigo-50 border-indigo-100 text-indigo-600'
+            }`}
+            aria-label={`Waktu tersisa ${timeLeft} detik`}
+          >
+            <span className="text-2xl font-black">{timeLeft}s</span>
+            <div className="w-20 h-2 bg-slate-200 rounded-full overflow-hidden mt-1">
+              <motion.div
+                animate={{ width: `${timerPercent}%` }}
+                className={`h-full ${isTimeCritical ? 'bg-rose-500' : 'bg-indigo-600'}`}
+              />
             </div>
-            <div className="bg-indigo-50 px-6 py-2 rounded-2xl border border-indigo-100">
-                <span className="text-xs font-black text-indigo-600 uppercase tracking-widest">Soal {currentIndex + 1} / {questions.length}</span>
-            </div>
+          </div>
+          <div
+            className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black text-sm uppercase"
+            onMouseEnter={() =>
+              isBlind && speak(`Soal ${currentIndex + 1} dari ${questions.length}`)
+            }
+          >
+            Soal {currentIndex + 1} / {questions.length}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-12">
-        <div className="w-full h-2 bg-slate-200 rounded-full mb-12 overflow-hidden">
+      {/* Deaf: red flash for time-critical */}
+      {isDeaf && isTimeCritical && (
+        <motion.div
+          animate={{ opacity: [0, 0.25, 0] }}
+          transition={{ repeat: Infinity, duration: 1 }}
+          className="fixed inset-0 bg-rose-500 pointer-events-none z-40"
+        />
+      )}
+
+      <main className={`max-w-4xl mx-auto px-6 py-12 ${isBlind || isMute ? 'mt-8' : ''}`}>
+        {/* Progress */}
+        <div className="w-full bg-slate-200 h-4 rounded-full mb-12 overflow-hidden border-2 border-white shadow-inner">
           <motion.div
             className="h-full bg-indigo-600"
-            initial={{ width: 0 }}
-            animate={{ width: `${((currentIndex) / questions.length) * 100}%` }}
+            animate={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
           />
         </div>
 
-        <div className="mb-12">
-          <motion.div
-            key={currentIndex}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            onMouseEnter={() => isBlind && speak(`Pertanyaan: ${currentQ?.text}`)}
-            className="p-12 bg-white rounded-[4rem] shadow-sm border border-slate-100 relative overflow-hidden"
+        <motion.div
+          key={currentIndex}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`p-12 bg-white rounded-[4rem] shadow-xl border-4 mb-12 ${
+            markedHard.includes(currentIndex) ? 'border-amber-400' : 'border-slate-50'
+          }`}
+        >
+          <div className="flex items-center gap-4 mb-8">
+            <span className="text-4xl">❓</span>
+            {markedHard.includes(currentIndex) && (
+              <span className="bg-amber-100 text-amber-700 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest">
+                ⚠️ Ditandai Sulit
+              </span>
+            )}
+          </div>
+          <h2
+            className={`font-black text-slate-800 leading-tight ${isDeaf ? 'text-5xl' : 'text-4xl'}`}
+            onMouseEnter={() => isBlind && speak(currentQ?.text)}
           >
-            <div className="flex items-center gap-4 mb-6">
-                <span className="text-3xl">❓</span>
-                <span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em]">Pertanyaan</span>
-            </div>
-            <h2 className={`font-black text-slate-800 leading-tight ${isTunarungu ? 'text-4xl' : 'text-3xl'}`}>
-              {currentQ?.text}
-            </h2>
-          </motion.div>
-        </div>
+            {currentQ?.text}
+          </h2>
+        </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        {/* Options */}
+        <div className="grid md:grid-cols-2 gap-8">
           {currentQ?.options.map((opt, i) => (
             <motion.button
               key={i}
-              whileHover={{ scale: 1.02, y: -4 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={() => handleAnswer(i)}
-              onMouseEnter={() => isBlind && speak(`Pilihan ${String.fromCharCode(65+i)}: ${opt}`)}
+              whileHover={{ y: -5 }}
+              onClick={() => handleAnswer(index)}
+              onMouseEnter={() =>
+                isBlind && speak(`Pilihan ${String.fromCharCode(65 + i)}: ${opt}`)
+              }
               disabled={selectedAnswer !== null}
-              className={`
-                p-8 rounded-[3rem] text-left font-black transition-all flex items-center gap-6 border-2
-                ${selectedAnswer === i
-                  ? (i === currentQ.correctIndex ? 'bg-emerald-500 border-emerald-600 text-white shadow-xl shadow-emerald-100' : 'bg-rose-500 border-rose-600 text-white shadow-xl shadow-rose-100')
-                  : selectedAnswer !== null && i === currentQ.correctIndex
-                    ? 'bg-emerald-50 text-emerald-600 border-emerald-200'
-                    : 'bg-white border-slate-50 text-slate-700 hover:border-indigo-200 shadow-sm'
-                }
-                ${isTunarungu ? 'text-2xl' : 'text-lg'}
-              `}
+              aria-label={`Pilihan ${String.fromCharCode(65 + i)}: ${opt}`}
+              className={`p-8 rounded-[3rem] text-left font-black transition-all flex items-center gap-6 border-4 ${
+                selectedAnswer === i
+                  ? 'bg-indigo-600 border-indigo-700 text-white shadow-2xl'
+                  : 'bg-white border-slate-100 text-slate-700 hover:border-indigo-300 shadow-sm'
+              } ${isDeaf ? 'text-3xl p-12' : 'text-xl'}`}
             >
-              <span className={`
-                w-12 h-12 rounded-2xl flex items-center justify-center font-black
-                ${selectedAnswer === i ? 'bg-white/20' : 'bg-indigo-50 text-indigo-600'}
-              `}>
+              <span
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black ${
+                  selectedAnswer === i ? 'bg-white/20' : 'bg-indigo-50 text-indigo-600'
+                }`}
+              >
                 {String.fromCharCode(65 + i)}
               </span>
               <span className="flex-1">{opt}</span>
@@ -343,18 +523,21 @@ const StudentQuiz = () => {
           ))}
         </div>
 
-        {currentIndex === questions.length - 1 && (
-            <div className="mt-12 flex justify-center">
-                 <button
-                    onMouseEnter={() => isBlind && speak('Tombol kirim kuis berada di bagian tengah bawah setelah pilihan jawaban terakhir.')}
-                    className="px-12 py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-widest hover:bg-indigo-600 transition-all shadow-xl"
-                 >
-                    Kirim Kuis
-                 </button>
-            </div>
+        {/* TUNANETRA: mark hard button */}
+        {isBlind && (
+          <div className="mt-8 text-center">
+            <button
+              onClick={() => {
+                setMarkedHard(prev => [...prev, currentIndex]);
+                speak('Soal ditandai sulit.');
+              }}
+              className="px-8 py-3 bg-amber-50 text-amber-600 rounded-2xl font-black text-xs uppercase border border-amber-100"
+            >
+              ⚠️ Tandai Sulit
+            </button>
+          </div>
         )}
       </main>
-      <ConfettiEffect active={showConfetti} />
     </div>
   );
 };

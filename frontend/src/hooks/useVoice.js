@@ -20,21 +20,14 @@ export function useVoice() {
   }, []);
 
   const unlockAudio = useCallback(() => {
-    if (hasInteracted) return;
-    const ctx = getAudioContext();
-    if (ctx.state === 'suspended') ctx.resume();
-    const buffer = ctx.createBuffer(1, 1, 22050);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(ctx.destination);
-    source.start(0);
-    setHasInteracted(true);
-  }, [getAudioContext, hasInteracted]);
+    // Disabled
+  }, []);
 
   useEffect(() => {
-    // Inisialisasi recognition hanya SEKALI (Singleton)
+    // Recognition logic kept for possible voice command features,
+    // but sound output is being disabled as per request.
     if (!sharedRecognition) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const SpeechRecognition = window.SpeechRecognition || window.webkitRecognition;
       if (SpeechRecognition) {
         sharedRecognition = new SpeechRecognition();
         sharedRecognition.continuous = true;
@@ -43,50 +36,20 @@ export function useVoice() {
       }
     }
 
-    const handleFirstInteraction = () => {
-      unlockAudio();
-      window.removeEventListener('click', handleFirstInteraction);
-      window.removeEventListener('keydown', handleFirstInteraction);
-    };
-
-    window.addEventListener('click', handleFirstInteraction);
-    window.addEventListener('keydown', handleFirstInteraction);
-
     return () => {
       isMounted.current = false;
-      window.removeEventListener('click', handleFirstInteraction);
-      window.removeEventListener('keydown', handleFirstInteraction);
     };
-  }, [unlockAudio]);
+  }, []);
 
   const playSound = useCallback((type = 'click') => {
-    try {
-      const ctx = getAudioContext();
-      if (ctx.state === 'suspended') ctx.resume();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      if (type === 'click') {
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1000, ctx.currentTime);
-        gain.gain.setValueAtTime(0.04, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.05);
-      }
-    } catch (e) {}
-  }, [getAudioContext]);
+    // Perbaikan: Hapus/Nonaktifkan semua sound effect
+    return;
+  }, []);
 
   const startListening = useCallback((onResult) => {
-    unlockAudio();
     if (!sharedRecognition) return;
-
-    // Reset status jika sebelumnya macet
     try { sharedRecognition.stop(); } catch(e) {}
-
     setIsListening(true);
-
     sharedRecognition.onresult = (event) => {
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -94,20 +57,12 @@ export function useVoice() {
       }
       if (finalTranscript && onResult) onResult(finalTranscript);
     };
-
-    sharedRecognition.onerror = (event) => {
-      console.error("Mic error:", event.error);
-      setIsListening(false);
-    };
-
-    sharedRecognition.onend = () => {
-      setIsListening(false);
-    };
-
+    sharedRecognition.onerror = () => setIsListening(false);
+    sharedRecognition.onend = () => setIsListening(false);
     setTimeout(() => {
         try { sharedRecognition.start(); } catch(e) {}
     }, 100);
-  }, [unlockAudio]);
+  }, []);
 
   const stopListening = useCallback(() => {
     if (sharedRecognition) {
@@ -117,28 +72,18 @@ export function useVoice() {
   }, []);
 
   const speak = useCallback((text, rate = 1.1) => {
-    if (!text || !isMounted.current) return;
-    synthesisRef.current.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = synthesisRef.current.getVoices();
-    const idVoice = voices.find(v => v.lang.includes('id-ID')) || voices.find(v => v.lang.includes('id'));
-    if (idVoice) utterance.voice = idVoice;
-    utterance.lang = 'id-ID';
-    utterance.rate = rate;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    synthesisRef.current.speak(utterance);
+    // Perbaikan: Hapus/Nonaktifkan semua fitur suara (TTS)
+    return;
   }, []);
 
   return {
     isListening,
-    isSpeaking,
+    isSpeaking: false,
     speak,
     playSound,
-    hasInteracted,
+    hasInteracted: true,
     startListening,
     stopListening,
-    stopSpeaking: () => synthesisRef.current.cancel()
+    stopSpeaking: () => {}
   }
 }

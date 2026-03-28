@@ -1,71 +1,168 @@
 /* BintangAi Adaptive UI - Support for Blind, Deaf, and Mute Students */
+/* All modes activate automatically based on disability_type */
 
-/* 1. BLIND (Tunanetra) - High Contrast & Font Scaling */
-[data-disability="tunanetra"] {
-    --bg-primary: #000000;
-    --text-primary: #FFFFFF;
-    --accent-color: #FFFF00; /* Yellow for high visibility */
+/* ============================================ */
+/* 1. BLIND (Tunanetra) - High Contrast & Voice Mode */
+/* ============================================ */
+html.blind-mode {
+  --bg-primary: #000000;
+  --text-primary: #FFFFFF;
+  --accent-color: #FFFF00;
 }
 
-[data-disability="tunanetra"] body {
-    background-color: #000 !important;
-    color: #fff !important;
+html.blind-mode body {
+  background-color: #000000 !important;
+  color: #ffffff !important;
 }
 
-[data-disability="tunanetra"] .bg-white,
-[data-disability="tunanetra"] .bg-slate-50,
-[data-disability="tunanetra"] header,
-[data-disability="tunanetra"] aside {
-    background-color: #000 !important;
-    border-color: #FFFF00 !important;
+html.blind-mode .bg-white,
+html.blind-mode .bg-slate-50,
+html.blind-mode header,
+html.blind-mode aside,
+html.blind-mode .bg-slate-100,
+html.blind-mode .bg-gray-50,
+html.blind-mode .bg-white\/80,
+html.blind-mode .bg-white\/90,
+html.blind-mode .backdrop-blur-md,
+html.blind-mode .backdrop-blur-sm {
+  background-color: #000000 !important;
+  background: #000000 !important;
+  backdrop-filter: none !important;
 }
 
-[data-disability="tunanetra"] button {
-    border: 3px solid #FFFF00 !important;
-    background-color: #000 !important;
-    color: #FFFF00 !important;
-    font-weight: 900 !important;
+html.blind-mode button,
+html.blind-mode a,
+html.blind-mode .cursor-pointer {
+  border: 2px solid #FFFF00 !important;
+  background-color: #000000 !important;
+  color: #FFFF00 !important;
+  font-weight: 900 !important;
 }
 
-[data-disability="tunanetra"] h1,
-[data-disability="tunanetra"] h2,
-[data-disability="tunanetra"] h3,
-[data-disability="tunanetra"] p,
-[data-disability="tunanetra"] span {
-    color: #fff !important;
+html.blind-mode button:hover,
+html.blind-mode a:hover {
+  background-color: #FFFF00 !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
 }
 
-/* 2. DEAF (Tunarungu) - Visual Feedback & Flash */
-[data-disability="tunarungu"] .visual-timer-flash {
-    animation: flash-red 1s infinite;
+html.blind-mode h1,
+html.blind-mode h2,
+html.blind-mode h3,
+html.blind-mode h4,
+html.blind-mode p,
+html.blind-mode span,
+html.blind-mode div:not([class*="bg-"]),
+html.blind-mode label {
+  color: #ffffff !important;
+}
+
+html.blind-mode input,
+html.blind-mode textarea,
+html.blind-mode select {
+  background-color: #222222 !important;
+  color: #FFFF00 !important;
+  border: 2px solid #FFFF00 !important;
+}
+
+html.blind-mode input::placeholder,
+html.blind-mode textarea::placeholder {
+  color: #888888 !important;
+}
+
+html.blind-mode .shadow-sm,
+html.blind-mode .shadow-lg,
+html.blind-mode .shadow-xl,
+html.blind-mode .shadow-md {
+  box-shadow: none !important;
+}
+
+/* ============================================ */
+/* 2. DEAF (Tunarungu) - Visual Clarity Mode */
+/* ============================================ */
+html.deaf-mode {
+  /* Increase overall contrast and legibility */
+  --text-main: #000000;
+  --bg-main: #FFFFFF;
+}
+
+html.deaf-mode body {
+  letter-spacing: 0.01em !important;
+  line-height: 1.6 !important;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Make all text bold and clear */
+html.deaf-mode p,
+html.deaf-mode h1,
+html.deaf-mode h2,
+html.deaf-mode h3,
+html.deaf-mode span,
+html.deaf-mode li,
+html.deaf-mode div {
+  font-weight: 600 !important; /* Semi-bold for better visibility */
+  color: #1a1a1a !important; /* Deep black for contrast */
+}
+
+/* Ensure backgrounds are solid for readability */
+html.deaf-mode .bg-white,
+html.deaf-mode .bg-slate-50 {
+  background-color: #ffffff !important;
+}
+
+/* Specific UI helpers for deaf students */
+html.deaf-mode .visual-timer-flash {
+  animation: flash-red 0.5s infinite;
+}
+
+html.deaf-mode .voice-feedback-icon,
+html.deaf-mode .mic-button,
+html.deaf-mode button[aria-label*="suara"],
+html.deaf-mode button[aria-label*="voice"] {
+  display: none !important;
 }
 
 @keyframes flash-red {
-    0% { background-color: transparent; }
-    50% { background-color: rgba(255, 0, 0, 0.2); }
-    100% { background-color: transparent; }
+  0% { background-color: transparent; }
+  50% { background-color: rgba(255, 0, 0, 0.2); }
+  100% { background-color: transparent; }
 }
 
-[data-disability="tunarungu"] .voice-feedback-icon {
-    display: none !important;
+/* Disable subtitle overlay since text is now clear */
+html.deaf-mode .subtitle-overlay,
+html.deaf-mode #deaf-subtitle-container {
+  display: none !important;
 }
 
-/* 3. MUTE (Tunawicara) - AAC Board Optimization */
-[data-disability="tunawicara"] .aac-grid {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 15px;
+/* ============================================ */
+/* 3. MUTE (Tunawicara) - Gesture Mode */
+/* ============================================ */
+html.mute-mode .voice-input,
+html.mute-mode .mic-button,
+html.mute-mode button[aria-label*="mic"],
+html.mute-mode button[aria-label*="mikrofon"] {
+  display: none !important;
 }
 
-/* 4. DYSLEXIA - OpenDyslexic Font Simulation */
-[data-disability="disleksia"] body {
-    font-family: 'OpenDyslexic', 'Comic Sans MS', sans-serif !important;
+/* ============================================ */
+/* 4. General Accessibility */
+/* ============================================ */
+*:focus-visible {
+  outline: 3px solid #FFFF00 !important;
+  outline-offset: 2px !important;
 }
 
-/* PWA Styling */
-@media all and (display-mode: standalone) {
-    body {
-        -webkit-user-select: none;
-        user-select: none;
-    }
+::selection {
+  background-color: #FFFF00 !important;
+  color: #000000 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

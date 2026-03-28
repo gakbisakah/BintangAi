@@ -5,10 +5,16 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
 import StudentSidebar from '../../components/StudentSidebar';
 import { useVoice } from '../../hooks/useVoice';
+import { useGestureControl } from '../../hooks/useGestureControl';
+import GestureCameraOverlay from '../../components/GestureCameraOverlay';
+import { useAccessibility } from '../../hooks/useAccessibility';
+import { useSubtitle } from '../../components/DeafSubtitleOverlay';
 
 const StudentCollaboration = () => {
   const { profile } = useAuthStore();
   const navigate = useNavigate();
+  const { isBlind, isDeaf, isMute } = useAccessibility();
+  const { showSubtitle } = useSubtitle();
 
   const [myGroups, setMyGroups] = useState([]);
   const [allGroups, setAllGroups] = useState([]);
@@ -27,7 +33,37 @@ const StudentCollaboration = () => {
   const fileInputRef = useRef(null);
   const { speak, startListening, stopListening, isListening } = useVoice();
 
-  const isBlind = profile?.disability_type === 'tunanetra';
+  // Gesture control integration
+  const {
+    videoRef,
+    canvasRef,
+    isActive: camActive,
+    gestureLabel,
+    lastGesture,
+    handDetected,
+    confidence,
+    landmarksVisible
+  } = useGestureControl({
+    enabled: isMute,
+    onGesture: (gesture, action, text) => {
+      if (action === 'next') {
+        handleSendMessage();
+        if (isDeaf) showSubtitle('Pesan dikirim', 'success');
+      }
+      if (action === 'back') {
+        setNewMessage('');
+        if (isDeaf) showSubtitle('Pesan dibatalkan', 'info');
+      }
+      if (action === 'select') {
+        // Quick reply
+        const quickReplies = ['Saya mengerti', 'Tolong jelaskan lagi', 'Terima kasih', 'Saya setuju'];
+        const randomReply = quickReplies[Math.floor(Math.random() * quickReplies.length)];
+        setNewMessage(randomReply);
+        setTimeout(() => handleSendMessage(randomReply), 500);
+        if (isDeaf) showSubtitle(`Quick reply: ${randomReply}`, 'info');
+      }
+    }
+  });
 
   useEffect(() => {
     fetchMyGroups();
@@ -246,6 +282,19 @@ const StudentCollaboration = () => {
   return (
     <div className="min-h-screen bg-[#FAFAFA] flex font-sans selection:bg-indigo-100">
       <StudentSidebar />
+
+      {isMute && (
+        <GestureCameraOverlay
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          isActive={camActive}
+          gestureLabel={gestureLabel}
+          lastGesture={lastGesture}
+          handDetected={handDetected}
+          confidence={confidence}
+          landmarksVisible={landmarksVisible}
+        />
+      )}
 
       {isBlind && (
         <button

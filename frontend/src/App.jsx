@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { useEffect } from 'react'
 import InactivityLogout from './components/InactivityLogout'
+import DeafSubtitleOverlay from './components/DeafSubtitleOverlay'
+import GestureCameraOverlay from './components/GestureCameraOverlay'
 import Landing from './pages/Landing'
 import Auth from './pages/Auth'
 import Profile from './pages/Profile'
@@ -19,9 +22,13 @@ import ParentDashboard from './pages/parent/Dashboard'
 import ParentChat from './pages/parent/Chat'
 
 function App() {
+  // Global accessibility provider - no manual toggles
   return (
     <BrowserRouter>
       <InactivityLogout>
+        {/* Global accessibility overlays - auto activate based on disability */}
+        <DeafSubtitleOverlay />
+
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
@@ -52,4 +59,4 @@ function App() {
   )
 }
 
-export default App;
+export default App
