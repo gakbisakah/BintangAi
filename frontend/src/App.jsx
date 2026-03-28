@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import InactivityLogout from './components/InactivityLogout';
 import DeafSubtitleOverlay from './components/DeafSubtitleOverlay';
+import GlobalGestureCamera from './components/GlobalGestureCamera';
 import Landing from './pages/Landing';
 import Auth from './pages/Auth';
 import Profile from './pages/Profile';
@@ -33,6 +34,7 @@ function AppContent() {
   return (
     <>
       <DeafSubtitleOverlay />
+      <GlobalGestureCamera />
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/auth" element={<Auth />} />

@@ -5,14 +5,21 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="eda5c7ed-3599-4636-bcf6-9682598eb62c" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/frontend/src/hooks/useVoiceCommandTunanetra.js" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/supabase/migrations/034_fix_public_profile_access.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/backend/supabase/migrations/034_fix_registration_visibility.sql" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/frontend/src/components/GlobalGestureCamera.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/App.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/App.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useGlobalVoiceNav.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useGlobalVoiceNav.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/components/GestureCameraOverlay.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/components/GestureCameraOverlay.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useGestureControl.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useGestureControl.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useVoice.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useVoice.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/main.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/main.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/store/accessibilityStore.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/store/accessibilityStore.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/styles/adaptive.css" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/styles/adaptive.css" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useVoiceCommandTunanetra.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useVoiceCommandTunanetra.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/Auth/index.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/Auth/index.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/Dashboard.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/Modules.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/Modules.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/Playground.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/Playground.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/TaskDetail.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/TaskDetail.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/Tasks.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/Tasks.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

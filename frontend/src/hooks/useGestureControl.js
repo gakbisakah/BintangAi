@@ -1,277 +1,172 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useAccessibilityStore } from '../store/accessibilityStore';
 
-// Gesture mapping
-export const GESTURE_MAP = {
-  thumbs_up: { label: '👍', action: 'confirm', text: 'OK' },
-  thumbs_down: { label: '👎', action: 'back', text: 'Kembali' },
-  peace: { label: '✌️', action: 'next', text: 'Lanjut' },
-  open_hand: { label: '✋', action: 'stop', text: 'Stop' },
-  point_up: { label: '☝️', action: 'ask_ai', text: 'Tanya AI' },
-  fist: { label: '✊', action: 'home', text: 'Beranda' },
-  ok: { label: '👌', action: 'confirm', text: 'OK' },
-  three_fingers: { label: '🤘', action: 'answer_c', text: 'Jawaban C' },
-  four_fingers: { label: '🖖', action: 'answer_d', text: 'Jawaban D' }
-};
-
-// Hand skeletal connections
 const HAND_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4], // thumb
-  [0, 5], [5, 6], [6, 7], [7, 8], // index
-  [5, 9], [9, 10], [10, 11], [11, 12], // middle
-  [9, 13], [13, 14], [14, 15], [15, 16], // ring
-  [13, 17], [17, 18], [18, 19], [19, 20], [0, 17] // pinky & palm
+  [0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14], [14, 15], [15, 16],
+  [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]
 ];
 
 const detectFingers = (landmarks) => {
-  if (!landmarks || landmarks.length < 21) return null;
-  const isFingerUp = (tip, pip) => tip.y < pip.y;
+  if (!landmarks) return 0;
+  let count = 0;
 
-  // Thumb detection (x-axis based for left/right hand)
-  const thumb = landmarks[4].x < landmarks[3].x;
+  // Deteksi Jari (Telunjuk, Tengah, Manis, Kelingking) - Sangat Akurat (Sumbu Y)
+  const tips = [8, 12, 16, 20];
+  const joints = [6, 10, 14, 18];
+  tips.forEach((tip, i) => {
+    if (landmarks[tip].y < landmarks[joints[i]].y) count++;
+  });
 
-  return {
-    thumb,
-    index: isFingerUp(landmarks[8], landmarks[6]),
-    middle: isFingerUp(landmarks[12], landmarks[10]),
-    ring: isFingerUp(landmarks[16], landmarks[14]),
-    pinky: isFingerUp(landmarks[20], landmarks[18])
-  };
+  // Deteksi Ibu Jari (Jempol) - Menggunakan Jarak Euclidean ke Pangkal Kelingking
+  // Ini jauh lebih akurat daripada hanya sumbu X atau Y
+  const thumbTip = landmarks[4];
+  const thumbMCP = landmarks[2];
+  const pinkyBase = landmarks[17];
+
+  const distTip = Math.sqrt(Math.pow(thumbTip.x - pinkyBase.x, 2) + Math.pow(thumbTip.y - pinkyBase.y, 2));
+  const distBase = Math.sqrt(Math.pow(thumbMCP.x - pinkyBase.x, 2) + Math.pow(thumbMCP.y - pinkyBase.y, 2));
+
+  // Jempol dianggap terbuka jika ujung jempol jauh dari telapak tangan
+  if (distTip > distBase * 1.15) count++;
+
+  return count;
 };
 
-const detectGesture = (fingers) => {
-  if (!fingers) return null;
-  const { thumb, index, middle, ring, pinky } = fingers;
-
-  if (thumb && !index && !middle && !ring && !pinky) return 'thumbs_up';
-  if (!thumb && !index && !middle && !ring && !pinky) return 'fist';
-  if (index && middle && !ring && !pinky && !thumb) return 'peace';
-  if (thumb && index && middle && ring && pinky) return 'open_hand';
-  if (index && !middle && !ring && !pinky && !thumb) return 'point_up';
-  if (thumb && index && !middle && !ring && !pinky) return 'ok';
-  if (index && middle && ring && !pinky && !thumb) return 'three_fingers';
-  if (index && middle && ring && pinky && !thumb) return 'four_fingers';
-
-  return null;
-};
-
-export function useGestureControl({ onGesture, enabled } = {}) {
-  const { mode, isGestureActive: storeGestureActive } = useAccessibilityStore();
-  const isMute = mode === 'tunawicara';
-  const isActiveMode = enabled !== undefined ? enabled : (isMute || storeGestureActive);
+export function useGestureControl({ onGesture, onScroll, enabled } = {}) {
+  const { mode, isGestureActive } = useAccessibilityStore();
+  const isActiveMode = enabled !== undefined ? enabled : (mode === 'tunawicara' || isGestureActive);
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const streamRef = useRef(null);
   const handsRef = useRef(null);
-  const animFrameRef = useRef(null);
-  const lastGestureTimeRef = useRef(0);
-  const gestureTimeoutRef = useRef(null);
+  const streamRef = useRef(null);
+  const lastYRef = useRef(null);
+  const onGestureRef = useRef(onGesture);
+  const onScrollRef = useRef(onScroll);
 
   const [isActive, setIsActive] = useState(false);
-  const [lastGesture, setLastGesture] = useState(null);
-  const [gestureLabel, setGestureLabel] = useState('');
   const [handDetected, setHandDetected] = useState(false);
+  const [totalFingers, setTotalFingers] = useState(0);
 
-  const drawSkeletalHand = useCallback((ctx, landmarks, width, height) => {
-    if (!ctx || !landmarks) return;
-
-    // Clear with semi-transparent for slight trail effect or full clear for accuracy
-    ctx.clearRect(0, 0, width, height);
-
-    // Draw Connections
-    ctx.strokeStyle = '#00FF00'; // Neon Green
-    ctx.lineWidth = 5;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#00FF00';
-
-    HAND_CONNECTIONS.forEach(([start, end]) => {
-      const p1 = landmarks[start];
-      const p2 = landmarks[end];
-      ctx.beginPath();
-      ctx.moveTo(p1.x * width, p1.y * height);
-      ctx.lineTo(p2.x * width, p2.y * height);
-      ctx.stroke();
-    });
-
-    // Draw Landmarks
-    ctx.shadowBlur = 0;
-    landmarks.forEach((lm, i) => {
-      const isTip = [4, 8, 12, 16, 20].includes(i);
-      ctx.fillStyle = isTip ? '#FF0000' : '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(lm.x * width, lm.y * height, isTip ? 6 : 4, 0, 2 * Math.PI);
-      ctx.fill();
-
-      // Outer ring for tips
-      if (isTip) {
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
-    });
-  }, []);
+  useEffect(() => { onGestureRef.current = onGesture; }, [onGesture]);
+  useEffect(() => { onScrollRef.current = onScroll; }, [onScroll]);
 
   const initHands = useCallback(() => {
     if (handsRef.current || !window.Hands) return;
-
     const hands = new window.Hands({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
     });
 
     hands.setOptions({
-      maxNumHands: 1,
+      maxNumHands: 2,
       modelComplexity: 1,
-      minDetectionConfidence: 0.7, // Increased for stability
-      minTrackingConfidence: 0.7
+      minDetectionConfidence: 0.8, // Menaikkan akurasi deteksi
+      minTrackingConfidence: 0.8
     });
 
+    let countBuffer = [];
+    let lastFinalCount = 0;
+
     hands.onResults((results) => {
-      const hasHand = results.multiHandLandmarks && results.multiHandLandmarks.length > 0;
+      const hasHand = results.multiHandLandmarks?.length > 0;
       setHandDetected(hasHand);
 
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
+      if (canvasRef.current && videoRef.current?.readyState >= 2) {
+        const ctx = canvasRef.current.getContext('2d');
+        const { clientWidth: w, clientHeight: h } = canvasRef.current;
+        if (canvasRef.current.width !== w || canvasRef.current.height !== h) {
+          canvasRef.current.width = w; canvasRef.current.height = h;
+        }
+        ctx.clearRect(0, 0, w, h);
 
-      if (canvas && video && video.readyState >= 2) {
-        const ctx = canvas.getContext('2d');
-        const width = canvas.clientWidth;
-        const height = canvas.clientHeight;
+        let currentFrameCount = 0;
+        if (hasHand) {
+          results.multiHandLandmarks.forEach((lm) => {
+            currentFrameCount += detectFingers(lm);
+            // Render Skeletal Hand (Indigo Neon)
+            ctx.strokeStyle = '#6366F1'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+            HAND_CONNECTIONS.forEach(([s, e]) => {
+              ctx.beginPath(); ctx.moveTo(lm[s].x * w, lm[s].y * h); ctx.lineTo(lm[e].x * w, lm[e].y * h); ctx.stroke();
+            });
+            lm.forEach(p => { ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(p.x * w, p.y * h, 3, 0, 2 * Math.PI); ctx.fill(); });
+          });
 
-        if (canvas.width !== width || canvas.height !== height) {
-          canvas.width = width;
-          canvas.height = height;
+          // Logic Scroll
+          const y = results.multiHandLandmarks[0][9].y;
+          if (lastYRef.current !== null && onScrollRef.current) {
+            const dy = y - lastYRef.current;
+            if (Math.abs(dy) > 0.05) onScrollRef.current(dy > 0 ? 'down' : 'up');
+          }
+          lastYRef.current = y;
+        } else {
+          lastYRef.current = null;
         }
 
-        if (hasHand) {
-          const landmarks = results.multiHandLandmarks[0];
-          drawSkeletalHand(ctx, landmarks, width, height);
+        // --- SISTEM BUFFER STABILITAS (Anti-Flicker) ---
+        // Simpan 10 frame terakhir
+        countBuffer.push(currentFrameCount);
+        if (countBuffer.length > 10) countBuffer.shift();
 
-          const fingers = detectFingers(landmarks);
-          const gesture = detectGesture(fingers);
+        // Cari angka yang paling sering muncul (Mode)
+        const counts = {};
+        countBuffer.forEach(x => { counts[x] = (counts[x] || 0) + 1; });
+        let modeCount = 0;
+        let maxFreq = 0;
+        for (const val in counts) {
+          if (counts[val] > maxFreq) { maxFreq = counts[val]; modeCount = parseInt(val); }
+        }
 
-          if (gesture) {
-            const now = Date.now();
-            if (now - lastGestureTimeRef.current >= 1200) { // Increased delay to prevent flickering
-              lastGestureTimeRef.current = now;
-              setLastGesture(gesture);
-              const info = GESTURE_MAP[gesture];
-              setGestureLabel(info?.label || '');
-
-              if (onGesture && info) {
-                onGesture(gesture, info.action, info.text);
-              }
-
-              if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
-              gestureTimeoutRef.current = setTimeout(() => {
-                setLastGesture(null);
-                setGestureLabel('');
-              }, 2000);
-            }
-          }
-        } else {
-          ctx.clearRect(0, 0, width, height);
+        // Hanya update jika angka tersebut muncul di > 70% frame terakhir
+        if (maxFreq >= 7 && modeCount !== lastFinalCount) {
+          lastFinalCount = modeCount;
+          setTotalFingers(modeCount);
+          if (onGestureRef.current) onGestureRef.current(modeCount);
         }
       }
     });
-
     handsRef.current = hands;
-  }, [onGesture, drawSkeletalHand]);
+  }, []);
 
   const startCamera = useCallback(async () => {
-    if (streamRef.current) return; // Already running
-
+    if (streamRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        }
+        video: { width: 640, height: 480, frameRate: { ideal: 30 } }
       });
-
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current.play().catch(console.error);
-          setIsActive(true);
-        };
+        videoRef.current.onloadedmetadata = () => { videoRef.current.play(); setIsActive(true); };
       }
-
       if (!window.Hands) {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
-        script.async = true;
-        script.onload = () => initHands();
-        document.head.appendChild(script);
-      } else {
-        initHands();
-      }
-    } catch (err) {
-      console.error('Camera Error:', err);
-      setIsActive(false);
-    }
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js';
+        s.async = true; s.onload = initHands; document.head.appendChild(s);
+      } else initHands();
+    } catch (e) { console.error(e); }
   }, [initHands]);
 
-  const stopCamera = useCallback(() => {
-    setIsActive(false);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop());
+  useEffect(() => {
+    if (isActiveMode) startCamera();
+    else {
+      setIsActive(false);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setHandDetected(false);
-  }, []);
+  }, [isActiveMode, startCamera]);
 
-  // Frame processing loop - separated from camera start to avoid flickering
   useEffect(() => {
-    let isMounted = true;
-
-    const processFrame = async () => {
-      if (!isMounted) return;
-
-      if (handsRef.current && videoRef.current && isActive) {
-        const video = videoRef.current;
-        if (video.readyState >= 2) {
-          try {
-            await handsRef.current.send({ image: video });
-          } catch (e) {
-            // Silently handle send errors to prevent loop breaking
-          }
-        }
+    let m = true;
+    const loop = async () => {
+      if (m && handsRef.current && videoRef.current?.readyState >= 2 && isActive) {
+        try { await handsRef.current.send({ image: videoRef.current }); } catch(e){}
       }
-      animFrameRef.current = requestAnimationFrame(processFrame);
+      requestAnimationFrame(loop);
     };
-
-    if (isActive) {
-      animFrameRef.current = requestAnimationFrame(processFrame);
-    }
-
-    return () => {
-      isMounted = false;
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
+    loop();
+    return () => { m = false; };
   }, [isActive]);
 
-  useEffect(() => {
-    if (isActiveMode) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-
-    return () => {
-      if (gestureTimeoutRef.current) clearTimeout(gestureTimeoutRef.current);
-    };
-  }, [isActiveMode, startCamera, stopCamera]);
-
-  return {
-    videoRef, canvasRef, isActive, lastGesture, gestureLabel, handDetected,
-    startCamera, stopCamera, GESTURE_MAP
-  };
+  return { videoRef, canvasRef, isActive, handDetected, totalFingers };
 }

@@ -290,6 +290,7 @@ const StudentModules = () => {
                   : modules.map(m => (
                       <button
                         key={m.id}
+                        data-gesture-item="true"
                         onClick={() => selectModule(m)}
                         onMouseEnter={() => handleHover(`Materi: ${m.title}`)}
                         aria-label={`Buka materi: ${m.title}`}

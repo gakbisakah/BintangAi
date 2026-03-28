@@ -111,7 +111,7 @@ const ParentDashboard = () => {
     try {
       const { data, error } = await supabase.from('student_reports').select('*, profiles!teacher_id(full_name)').eq('student_id', profile.linked_student_id).order('created_at', { ascending: false });
       if (!error) setReportsList(data || []);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) { console.error(err); } finally { setReportLoading(false); }
   };
 
   const handleDownloadPdf = () => window.print();
@@ -253,6 +253,107 @@ const ParentDashboard = () => {
              </motion.div>
             )}
           </AnimatePresence>
+        </div>
+
+        {/* Report Detail Modal */}
+        <AnimatePresence>
+          {showPdfPreview && selectedReport && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowPdfPreview(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="relative bg-white w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-[2.5rem] shadow-2xl flex flex-col"
+              >
+                {/* Header Modal */}
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-indigo-50/30">
+                  <div>
+                    <h3 className="text-2xl font-bold text-slate-900">Laporan {selectedReport.report_type}</h3>
+                    <p className="text-slate-500 font-medium mt-1">
+                      Oleh Guru: {selectedReport.profiles?.full_name || 'Guru BintangAi'} • {new Date(selectedReport.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowPdfPreview(false)}
+                    className="w-12 h-12 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-all shadow-sm"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Content Modal */}
+                <div className="flex-1 overflow-y-auto p-8 md:p-12">
+                  <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 whitespace-pre-wrap text-slate-700 leading-relaxed text-lg">
+                    {selectedReport.content}
+                  </div>
+                </div>
+
+                {/* Footer Modal */}
+                <div className="p-8 border-t border-slate-100 flex justify-end gap-4 bg-slate-50/50">
+                  <button
+                    onClick={handleDownloadPdf}
+                    className="px-8 py-3 bg-white border-2 border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-all"
+                  >
+                    Cetak Laporan
+                  </button>
+                  <button
+                    onClick={() => setShowPdfPreview(false)}
+                    className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+                  >
+                    Selesai Membaca
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Printable Report (Hidden in UI) */}
+        <div className="hidden print:block p-10 bg-white min-h-screen">
+          {selectedReport && (
+            <div className="max-w-4xl mx-auto">
+              <header className="border-b-4 border-indigo-600 pb-8 mb-8 flex justify-between items-end">
+                <div>
+                  <h1 className="text-4xl font-black text-slate-900 uppercase tracking-tighter">Laporan Belajar</h1>
+                  <p className="text-xl font-bold text-indigo-600">Sistem Kecerdasan BintangAi</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-slate-500 uppercase tracking-widest text-xs">Tanggal Laporan</p>
+                  <p className="text-lg font-bold">{new Date(selectedReport.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                </div>
+              </header>
+
+              <section className="grid grid-cols-2 gap-8 mb-12">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Nama Siswa</h4>
+                  <p className="text-xl font-bold text-slate-900">{childData?.full_name}</p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Jenis Laporan</h4>
+                  <p className="text-xl font-bold text-slate-900">Laporan {selectedReport.report_type}</p>
+                </div>
+              </section>
+
+              <div className="bg-slate-50 p-10 rounded-[2rem] border border-slate-100 min-h-[500px]">
+                <h3 className="text-sm font-bold text-indigo-600 uppercase tracking-widest mb-6 border-b border-indigo-100 pb-4">Analisis & Rekomendasi AI</h3>
+                <div className="whitespace-pre-wrap text-slate-800 leading-relaxed">
+                  {selectedReport.content}
+                </div>
+              </div>
+
+              <footer className="mt-20 pt-8 border-t border-slate-100 flex justify-between items-center opacity-50">
+                <p className="text-xs font-bold">Laporan ini dibuat otomatis oleh BintangAi untuk {profile?.full_name}.</p>
+                <p className="text-xs font-bold italic">© 2026 BintangAi</p>
+              </footer>
+            </div>
+          )}
         </div>
       </main>
     </div>

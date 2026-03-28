@@ -7,14 +7,11 @@ export function useVoice() {
   const [isListening, setIsListening] = useState(false)
   const isMounted = useRef(true)
 
-  // Use a global flag to check if voice should be active
-  // This is a safety measure to ensure no voice runs on login/register/landing
   const isPublicPage = ['/auth', '/login', '/register', '/'].includes(window.location.pathname);
 
   useEffect(() => {
     return () => {
       isMounted.current = false;
-      // Cleanup any pending speech on unmount
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -22,61 +19,71 @@ export function useVoice() {
   }, []);
 
   const playSound = useCallback((type = 'click') => {
-    // Sound disabled globally for now as per previous instruction
     return;
   }, []);
 
   const startListening = useCallback((onResult) => {
-    if (isPublicPage) return; // Block on public pages
+    if (isPublicPage) return;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
     if (!sharedRecognition) {
       sharedRecognition = new SpeechRecognition();
-      sharedRecognition.continuous = false;
-      sharedRecognition.interimResults = false;
       sharedRecognition.lang = 'id-ID';
     }
 
+    // Set config for real-time and continuous capture
+    sharedRecognition.continuous = true;
+    sharedRecognition.interimResults = true;
+
     setIsListening(true);
+
     sharedRecognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      if (onResult) onResult(transcript);
+      let fullTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        fullTranscript += event.results[i][0].transcript;
+      }
+      if (onResult) onResult(fullTranscript);
     };
-    sharedRecognition.onend = () => setIsListening(false);
-    sharedRecognition.onerror = () => setIsListening(false);
+
+    sharedRecognition.onend = () => {
+      setIsListening(false);
+    };
+
+    sharedRecognition.onerror = (event) => {
+      console.error("Speech recognition error", event.error);
+      setIsListening(false);
+    };
 
     try {
       sharedRecognition.start();
     } catch (e) {
-      console.warn("Recognition already started");
+      // If already started, we just let it be
     }
   }, [isPublicPage]);
 
   const stopListening = useCallback(() => {
     if (sharedRecognition) {
-      sharedRecognition.stop();
+      try {
+        sharedRecognition.stop();
+      } catch (e) {}
       setIsListening(false);
     }
   }, []);
 
   const speak = useCallback((text, rate = 1.1) => {
-    // CRITICAL FIX: Block speech synthesis on public pages and if not explicitly called
     if (isPublicPage || !text || !window.speechSynthesis) {
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       return;
     }
 
-    // Cancel any ongoing speech before starting new one
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'id-ID';
     utterance.rate = rate;
     utterance.pitch = 1.0;
 
-    // Safety check: only speak if the page is still active
     if (isMounted.current) {
       window.speechSynthesis.speak(utterance);
     }

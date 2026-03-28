@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/authStore';
@@ -22,8 +22,32 @@ const Auth = () => {
   const [studentIdInput, setStudentIdInput] = useState('');
 
   const navigate = useNavigate();
+  const location = useLocation();
   const { setUser, setProfile, fetchProfile } = useAuthStore();
   const { setModeFromProfile } = useAccessibilityStore();
+
+  const demoAccounts = [
+    { label: 'Guru', email: 'santaku@gmail.com', pass: 'santaku', icon: '👨‍🏫', color: 'bg-blue-50 text-blue-700' },
+    { label: 'Tunanetra', email: 'zakaria@gmail.com', pass: 'zakaria', icon: '🦯', color: 'bg-purple-50 text-purple-700' },
+    { label: 'Tunarungu', email: 'zabarku@gmail.com', pass: 'zabarku', icon: '🤟', color: 'bg-orange-50 text-orange-700' },
+    { label: 'Tunawicara', email: 'apapula@gmail.com', pass: 'apapula', icon: '🗣️', color: 'bg-emerald-50 text-emerald-700' },
+    { label: 'Orang Tua', email: 'Mega@gmail.com', pass: 'Megakulah', icon: '👪', color: 'bg-rose-50 text-rose-700' },
+  ];
+
+  const fillDemoAccount = (acc) => {
+    setEmail(acc.email);
+    setPassword(acc.pass);
+    setMessage(`Akun ${acc.label} terpilih! Klik Masuk Sekarang.`);
+    // Scroll to top of form if needed
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const mode = params.get('mode');
+    if (mode === 'register') setIsLogin(false);
+    if (mode === 'login') setIsLogin(true);
+  }, [location.search]);
 
   useEffect(() => {
     setMessage(null);
@@ -46,7 +70,7 @@ const Auth = () => {
   };
 
   const handleAuth = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     const cleanEmail = email.toLowerCase().trim();
 
     if (!validateEmail(cleanEmail)) {
@@ -160,7 +184,6 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen flex font-sans bg-[#F8FAFC] selection:bg-indigo-100">
-      {/* Left Side: Branding & Info */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
         <div
           className="absolute inset-0 z-0"
@@ -214,7 +237,6 @@ const Auth = () => {
         </div>
       </div>
 
-      {/* Right Side: Auth Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 md:p-12 bg-slate-50">
         <div className="w-full max-w-lg">
           <div className="mb-10 text-center lg:text-left">
@@ -229,13 +251,47 @@ const Auth = () => {
           <div className="bg-white p-10 md:p-12 rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-50 rounded-full -mr-20 -mt-20 opacity-40 blur-2xl" />
 
+            {/* Akses Cepat Akun Demo */}
+            {isLogin && (
+              <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-8 relative z-10"
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-[2px] flex-1 bg-slate-100" />
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Akun Terdaftar</span>
+                  <div className="h-[2px] flex-1 bg-slate-100" />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {demoAccounts.map((acc) => (
+                    <button
+                      key={acc.email}
+                      type="button"
+                      onClick={() => fillDemoAccount(acc)}
+                      className={`flex items-center gap-3 p-3 rounded-2xl border-2 border-transparent hover:border-indigo-200 hover:bg-white transition-all shadow-sm group ${acc.color}`}
+                    >
+                      <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm group-hover:scale-110 transition-transform">
+                        {acc.icon}
+                      </div>
+                      <div className="text-left overflow-hidden">
+                        <p className="text-xs font-black truncate">{acc.label}</p>
+                        <p className="text-[10px] opacity-70 font-bold truncate">Klik pilih</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
             <AnimatePresence mode="wait">
               {message && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className={`mb-8 p-5 rounded-2xl text-sm font-bold text-center ${
-                    message.includes('berhasil') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
+                  className={`mb-8 p-5 rounded-2xl text-sm font-bold text-center relative z-10 ${
+                    message.includes('berhasil') || message.includes('terpilih') ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
                   }`}
                 >
                   {message}
@@ -384,7 +440,7 @@ const Auth = () => {
               </button>
             </form>
 
-            <div className="mt-10 text-center border-t border-slate-100 pt-8">
+            <div className="mt-10 text-center border-t border-slate-100 pt-8 relative z-10">
               <p className="text-slate-500 font-medium mb-2">
                 {isLogin ? 'Belum punya akun?' : 'Sudah memiliki akun?'}
               </p>

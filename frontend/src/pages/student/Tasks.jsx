@@ -221,6 +221,7 @@ const StudentTasks = () => {
                   {tasks.map((task, idx) => (
                     <motion.div
                       key={task.id}
+                      data-gesture-item="true"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.1 }}
