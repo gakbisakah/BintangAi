@@ -2,115 +2,238 @@
 /* All modes activate automatically based on disability_type */
 
 /* ============================================ */
-/* 1. BLIND (Tunanetra) - High Contrast & Voice Mode */
+/* BLIND MODE (Tunanetra) - High Contrast & Persisten */
 /* ============================================ */
-html.blind-mode {
-  --bg-primary: #000000;
-  --text-primary: #FFFFFF;
-  --accent-color: #FFFF00;
+
+/* Force apply on page load */
+html.blind-mode,
+html[data-disability="tunanetra"] {
+  --bg-primary: #000000 !important;
+  --text-primary: #FFFFFF !important;
+  --accent-color: #FFFF00 !important;
 }
 
-html.blind-mode body {
+html.blind-mode body,
+html[data-disability="tunanetra"] body {
   background-color: #000000 !important;
   color: #ffffff !important;
 }
 
+/* All backgrounds forced to black */
 html.blind-mode .bg-white,
+html[data-disability="tunanetra"] .bg-white,
 html.blind-mode .bg-slate-50,
-html.blind-mode header,
-html.blind-mode aside,
+html[data-disability="tunanetra"] .bg-slate-50,
 html.blind-mode .bg-slate-100,
+html[data-disability="tunanetra"] .bg-slate-100,
 html.blind-mode .bg-gray-50,
+html[data-disability="tunanetra"] .bg-gray-50,
+html.blind-mode .bg-slate-50\/50,
+html[data-disability="tunanetra"] .bg-slate-50\/50,
 html.blind-mode .bg-white\/80,
+html[data-disability="tunanetra"] .bg-white\/80,
 html.blind-mode .bg-white\/90,
+html[data-disability="tunanetra"] .bg-white\/90,
 html.blind-mode .backdrop-blur-md,
-html.blind-mode .backdrop-blur-sm {
+html[data-disability="tunanetra"] .backdrop-blur-md,
+html.blind-mode .backdrop-blur-sm,
+html[data-disability="tunanetra"] .backdrop-blur-sm,
+html.blind-mode header,
+html[data-disability="tunanetra"] header,
+html.blind-mode aside,
+html[data-disability="tunanetra"] aside,
+html.blind-mode .bg-indigo-50,
+html[data-disability="tunanetra"] .bg-indigo-50,
+html.blind-mode .bg-purple-50,
+html[data-disability="tunanetra"] .bg-purple-50,
+html.blind-mode .bg-amber-50,
+html[data-disability="tunanetra"] .bg-amber-50,
+html.blind-mode .bg-emerald-50,
+html[data-disability="tunanetra"] .bg-emerald-50 {
   background-color: #000000 !important;
   background: #000000 !important;
   backdrop-filter: none !important;
 }
 
+/* Buttons and interactive elements */
 html.blind-mode button,
+html[data-disability="tunanetra"] button,
 html.blind-mode a,
-html.blind-mode .cursor-pointer {
-  border: 2px solid #FFFF00 !important;
+html[data-disability="tunanetra"] a,
+html.blind-mode .cursor-pointer,
+html[data-disability="tunanetra"] .cursor-pointer {
+  border: 3px solid #FFFF00 !important;
   background-color: #000000 !important;
   color: #FFFF00 !important;
   font-weight: 900 !important;
+  outline: none !important;
 }
 
 html.blind-mode button:hover,
-html.blind-mode a:hover {
+html[data-disability="tunanetra"] button:hover,
+html.blind-mode a:hover,
+html[data-disability="tunanetra"] a:hover {
   background-color: #FFFF00 !important;
+  color: #000000 !important;
+  border-color: #000000 !important;
+  transform: scale(1.02);
+}
+
+/* Focus outline for keyboard navigation */
+html.blind-mode button:focus,
+html[data-disability="tunanetra"] button:focus,
+html.blind-mode a:focus,
+html[data-disability="tunanetra"] a:focus,
+html.blind-mode input:focus,
+html[data-disability="tunanetra"] input:focus {
+  outline: 4px solid #FFFF00 !important;
+  outline-offset: 4px !important;
+}
+
+/* Text elements - forced white */
+html.blind-mode h1,
+html[data-disability="tunanetra"] h1,
+html.blind-mode h2,
+html[data-disability="tunanetra"] h2,
+html.blind-mode h3,
+html[data-disability="tunanetra"] h3,
+html.blind-mode h4,
+html[data-disability="tunanetra"] h4,
+html.blind-mode p,
+html[data-disability="tunanetra"] p,
+html.blind-mode span,
+html[data-disability="tunanetra"] span,
+html.blind-mode div:not([class*="bg-"]),
+html[data-disability="tunanetra"] div:not([class*="bg-"]),
+html.blind-mode label,
+html[data-disability="tunanetra"] label,
+html.blind-mode td,
+html[data-disability="tunanetra"] td,
+html.blind-mode li,
+html[data-disability="tunanetra"] li {
+  color: #ffffff !important;
+}
+
+/* Input fields */
+html.blind-mode input,
+html[data-disability="tunanetra"] input,
+html.blind-mode textarea,
+html[data-disability="tunanetra"] textarea,
+html.blind-mode select,
+html[data-disability="tunanetra"] select {
+  background-color: #222222 !important;
+  color: #FFFF00 !important;
+  border: 2px solid #FFFF00 !important;
+  padding: 12px !important;
+  font-size: 16px !important;
+}
+
+html.blind-mode input::placeholder,
+html[data-disability="tunanetra"] input::placeholder,
+html.blind-mode textarea::placeholder,
+html[data-disability="tunanetra"] textarea::placeholder {
+  color: #888888 !important;
+}
+
+/* Remove shadows for better contrast */
+html.blind-mode .shadow-sm,
+html[data-disability="tunanetra"] .shadow-sm,
+html.blind-mode .shadow-lg,
+html[data-disability="tunanetra"] .shadow-lg,
+html.blind-mode .shadow-xl,
+html[data-disability="tunanetra"] .shadow-xl,
+html.blind-mode .shadow-md,
+html[data-disability="tunanetra"] .shadow-md {
+  box-shadow: none !important;
+}
+
+/* Special high contrast for AI responses */
+html.blind-mode .bg-indigo-600,
+html[data-disability="tunanetra"] .bg-indigo-600 {
+  background-color: #FFFF00 !important;
+  color: #000000 !important;
+}
+
+html.blind-mode .bg-indigo-600 button,
+html[data-disability="tunanetra"] .bg-indigo-600 button {
   color: #000000 !important;
   border-color: #000000 !important;
 }
 
-html.blind-mode h1,
-html.blind-mode h2,
-html.blind-mode h3,
-html.blind-mode h4,
-html.blind-mode p,
-html.blind-mode span,
-html.blind-mode div:not([class*="bg-"]),
-html.blind-mode label {
-  color: #ffffff !important;
+/* Selection highlight */
+html.blind-mode ::selection,
+html[data-disability="tunanetra"] ::selection {
+  background-color: #FFFF00 !important;
+  color: #000000 !important;
 }
 
-html.blind-mode input,
-html.blind-mode textarea,
-html.blind-mode select {
-  background-color: #222222 !important;
-  color: #FFFF00 !important;
+/* Scrollbar visibility */
+html.blind-mode ::-webkit-scrollbar,
+html[data-disability="tunanetra"] ::-webkit-scrollbar {
+  width: 12px;
+  background: #000000;
+}
+
+html.blind-mode ::-webkit-scrollbar-thumb,
+html[data-disability="tunanetra"] ::-webkit-scrollbar-thumb {
+  background: #FFFF00;
+  border-radius: 6px;
+}
+
+/* Ensure all borders are visible */
+html.blind-mode .border,
+html[data-disability="tunanetra"] .border,
+html.blind-mode .border-slate-100,
+html[data-disability="tunanetra"] .border-slate-100,
+html.blind-mode .border-slate-200,
+html[data-disability="tunanetra"] .border-slate-200 {
+  border-color: #FFFF00 !important;
+  border-width: 1px !important;
+}
+
+/* High contrast for cards and containers */
+html.blind-mode .rounded-2xl,
+html[data-disability="tunanetra"] .rounded-2xl,
+html.blind-mode .rounded-3xl,
+html[data-disability="tunanetra"] .rounded-3xl,
+html.blind-mode .rounded-[2rem],
+html[data-disability="tunanetra"] .rounded-[2rem] {
   border: 2px solid #FFFF00 !important;
-}
-
-html.blind-mode input::placeholder,
-html.blind-mode textarea::placeholder {
-  color: #888888 !important;
-}
-
-html.blind-mode .shadow-sm,
-html.blind-mode .shadow-lg,
-html.blind-mode .shadow-xl,
-html.blind-mode .shadow-md {
-  box-shadow: none !important;
 }
 
 /* ============================================ */
 /* 2. DEAF (Tunarungu) - Visual Clarity Mode */
 /* ============================================ */
 html.deaf-mode {
-  /* Increase overall contrast and legibility */
   --text-main: #000000;
   --bg-main: #FFFFFF;
 }
 
 html.deaf-mode body {
-  letter-spacing: 0.01em !important;
+  background-color: #F1F5F9 !important;
   line-height: 1.6 !important;
-  -webkit-font-smoothing: antialiased;
 }
 
-/* Make all text bold and clear */
-html.deaf-mode p,
 html.deaf-mode h1,
 html.deaf-mode h2,
 html.deaf-mode h3,
+html.deaf-mode h4,
+html.deaf-mode p,
 html.deaf-mode span,
 html.deaf-mode li,
-html.deaf-mode div {
-  font-weight: 600 !important; /* Semi-bold for better visibility */
-  color: #1a1a1a !important; /* Deep black for contrast */
+html.deaf-mode label,
+html.deaf-mode div:not([class*="bg-"]) {
+  color: #000000 !important;
+  font-weight: 700 !important;
+  text-shadow: none !important;
+  letter-spacing: 0.02em !important;
 }
 
-/* Ensure backgrounds are solid for readability */
-html.deaf-mode .bg-white,
-html.deaf-mode .bg-slate-50 {
+html.deaf-mode .bg-white {
   background-color: #ffffff !important;
+  border: 2px solid #E2E8F0 !important;
 }
 
-/* Specific UI helpers for deaf students */
 html.deaf-mode .visual-timer-flash {
   animation: flash-red 0.5s infinite;
 }
@@ -128,7 +251,6 @@ html.deaf-mode button[aria-label*="voice"] {
   100% { background-color: transparent; }
 }
 
-/* Disable subtitle overlay since text is now clear */
 html.deaf-mode .subtitle-overlay,
 html.deaf-mode #deaf-subtitle-container {
   display: none !important;

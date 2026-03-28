@@ -1,6 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAccessibilityStore } from '../store/accessibilityStore';
+import { useSubtitle } from '../components/DeafSubtitleOverlay';
 
 let sharedRecognition = null;
 let isRecognitionActive = false;
@@ -9,11 +10,15 @@ export function useGlobalVoiceNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { mode, isVoiceActive } = useAccessibilityStore();
+  const { showSubtitle } = useSubtitle();
   const isBlind = mode === 'tunanetra';
   const activeRef = useRef(false);
   const synthRef = useRef(window.speechSynthesis);
   const lastSpokenRef = useRef('');
   const menuAnnouncedRef = useRef(false);
+  const [aiListening, setAiListening] = useState(false);
+  const [aiTranscript, setAiTranscript] = useState('');
+  const aiRecognitionRef = useRef(null);
 
   const speak = useCallback((text, rate = 1.0) => {
     if (!text || !isBlind) return;
@@ -34,129 +39,105 @@ export function useGlobalVoiceNav() {
     }
   }, [isBlind]);
 
-  // Announce sidebar menu on page load
-  const announceSidebar = useCallback(() => {
-    const menuItems = [
-      'Beranda', 'QuizKu', 'Materi Modul', 'Kolaborasi', 'Tanya AI', 'Profil'
-    ];
-    speak(`Menu utama: ${menuItems.join(', ')}. Katakan nama menu untuk navigasi.`);
-  }, [speak]);
+  // AI Microphone khusus untuk Tanya AI
+  // Ditingkatkan akurasinya dengan pengaturan khusus
+  const startAIMicrophone = useCallback((onResult, onStop) => {
+    if (!isBlind) return;
 
-  // Read page title and content on load
-  const readPageContent = useCallback(() => {
-    const title = document.querySelector('h1, h2')?.innerText || location.pathname;
-    const mainContent = document.querySelector('main')?.innerText || '';
-    speak(`${title}. ${mainContent.slice(0, 500)}`);
-  }, [speak, location]);
+    if (aiRecognitionRef.current) {
+      try {
+        aiRecognitionRef.current.stop();
+      } catch(e) {}
+    }
 
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      speak('Browser tidak mendukung pengenalan suara');
+      return;
+    }
+
+    const recognition = new SR();
+    // High accuracy settings
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'id-ID';
+    recognition.maxAlternatives = 1;
+
+    let finalTranscript = '';
+
+    recognition.onstart = () => {
+      setAiListening(true);
+      speak('Mikrofon aktif. Silakan bicara sekarang. Untuk mengirim pertanyaan, katakan OK');
+    };
+
+    recognition.onresult = (event) => {
+      let interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript + ' ';
+
+          // Deteksi perintah stop: "OK", "OKE", "Kirim", "Stop"
+          const t = transcript.toLowerCase();
+          if (t.includes('ok') || t.includes('oke') || t.includes('kirim') || t.includes('selesai')) {
+            recognition.stop();
+            if (onStop) onStop();
+            return;
+          }
+        } else {
+          interimTranscript += transcript;
+        }
+      }
+
+      // Update UI Teks secara real-time
+      const combined = (finalTranscript + interimTranscript).trim();
+      setAiTranscript(combined);
+      showSubtitle(`🎤 Mendengar: ${combined}`, 'info');
+    };
+
+    recognition.onerror = (event) => {
+      console.error('AI recognition error:', event.error);
+      if (event.error === 'network') speak('Masalah jaringan, periksa koneksi internet Anda.');
+      setAiListening(false);
+    };
+
+    recognition.onend = () => {
+      setAiListening(false);
+      // Bersihkan teks perintah dari transcript akhir
+      const cleanedResult = finalTranscript.replace(/ok|oke|kirim|selesai/gi, '').trim();
+      if (cleanedResult.length > 1) {
+        if (onResult) onResult(cleanedResult);
+      }
+      speak('Mikrofon dimatikan');
+    };
+
+    aiRecognitionRef.current = recognition;
+    recognition.start();
+  }, [isBlind, speak, showSubtitle]);
+
+  const stopAIMicrophone = useCallback(() => {
+    if (aiRecognitionRef.current) {
+      try {
+        aiRecognitionRef.current.stop();
+      } catch(e) {}
+    }
+    setAiListening(false);
+  }, []);
+
+  // Perintah suara navigasi global tetap aktif
   const processCommand = useCallback((transcript) => {
     const t = transcript.toLowerCase().trim();
-    console.log('[VoiceNav] command:', t);
-
-    // Navigation commands
-    if (t.includes('beranda') || t === 'home') {
-      speak('Membuka beranda');
-      navigate('/student/dashboard');
-      return;
-    }
-    if (t.includes('quizku') || t.includes('quiz') || t.includes('tugas')) {
-      speak('Membuka halaman quiz');
-      navigate('/student/tasks');
-      return;
-    }
-    if (t.includes('materi') || t.includes('modul')) {
-      speak('Membuka materi modul');
-      navigate('/student/modules');
-      return;
-    }
-    if (t.includes('kolaborasi') || t.includes('diskusi') || t.includes('grup')) {
-      speak('Membuka halaman kolaborasi');
-      navigate('/student/collaboration');
-      return;
-    }
-    if (t.includes('tanya ai') || t.includes('ai') || t.includes('asisten')) {
-      speak('Membuka asisten AI');
-      navigate('/student/playground');
-      return;
-    }
-    if (t.includes('profil') || t.includes('akun')) {
-      speak('Membuka profil');
-      navigate('/profile');
-      return;
-    }
-    if (t.includes('kembali') || t.includes('back')) {
-      speak('Kembali');
-      navigate(-1);
-      return;
-    }
-
-    // Scroll commands
-    if (t.includes('scroll bawah') || t.includes('gulir bawah')) {
-      window.scrollBy({ top: 500, behavior: 'smooth' });
-      speak('Menggulir ke bawah');
-      return;
-    }
-    if (t.includes('scroll atas') || t.includes('gulir atas')) {
-      window.scrollBy({ top: -500, behavior: 'smooth' });
-      speak('Menggulir ke atas');
-      return;
-    }
-
-    // Read commands
-    if (t.includes('baca menu') || t.includes('daftar menu')) {
-      announceSidebar();
-      return;
-    }
-    if (t.includes('baca halaman') || t.includes('baca semua')) {
-      readPageContent();
-      return;
-    }
-
-    // Quiz specific
-    if (t.includes('mulai quiz') || t.includes('kerjakan')) {
-      const startBtn = document.querySelector('button:has(span:contains("Mulai"))');
-      if (startBtn) {
-        speak('Memulai quiz');
-        startBtn.click();
-      } else {
-        speak('Tidak ada tombol mulai. Pilih quiz terlebih dahulu.');
-      }
-      return;
-    }
-
-    // Answer selection for quiz
-    const answerMap = {
-      'pilih a': 'A', 'jawab a': 'A', 'pilihan a': 'A',
-      'pilih b': 'B', 'jawab b': 'B', 'pilihan b': 'B',
-      'pilih c': 'C', 'jawab c': 'C', 'pilihan c': 'C',
-      'pilih d': 'D', 'jawab d': 'D', 'pilihan d': 'D'
-    };
-    for (const [cmd, letter] of Object.entries(answerMap)) {
-      if (t.includes(cmd)) {
-        speak(`Jawaban ${letter} dipilih`);
-        const btn = document.querySelector(`button:has(span:contains("${letter}"))`);
-        if (btn) btn.click();
-        return;
-      }
-    }
-
-    if (t.includes('lanjut') || t.includes('next') || t.includes('soal berikutnya')) {
-      speak('Soal berikutnya');
-      const nextBtn = document.querySelector('button:has(span:contains("Lanjut"))');
-      if (nextBtn) nextBtn.click();
-      return;
-    }
-  }, [navigate, speak, announceSidebar, readPageContent]);
+    if (t.includes('kembali')) { navigate(-1); speak('Kembali'); return; }
+    if (t.includes('beranda')) { navigate('/student/dashboard'); speak('Beranda'); return; }
+    if (t.includes('baca halaman')) { readPageContent(); return; }
+  }, [navigate, speak]);
 
   const startGlobalListening = useCallback(() => {
-    if (!isBlind || !isVoiceActive || activeRef.current) return;
+    if (!isBlind || !isVoiceActive || activeRef.current || aiListening) return;
 
     if (!sharedRecognition) {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) {
-        console.warn('SpeechRecognition not supported');
-        return;
-      }
+      if (!SR) return;
       sharedRecognition = new SR();
       sharedRecognition.continuous = true;
       sharedRecognition.interimResults = false;
@@ -171,107 +152,65 @@ export function useGlobalVoiceNav() {
       }
     };
 
-    sharedRecognition.onerror = (event) => {
-      console.error('Speech recognition error', event.error);
-      if (event.error === 'not-allowed') {
-        speak('Mikrofon tidak diizinkan. Mohon izinkan akses mikrofon di browser.');
-        activeRef.current = false;
-        return;
-      }
-    };
-
     sharedRecognition.onend = () => {
       isRecognitionActive = false;
-      if (activeRef.current) {
+      if (activeRef.current && !aiListening) {
         setTimeout(() => {
-          if (activeRef.current) {
-            try {
-              sharedRecognition.start();
-              isRecognitionActive = true;
-            } catch (e) {}
+          if (activeRef.current && !aiListening) {
+            try { sharedRecognition.start(); isRecognitionActive = true; } catch (e) {}
           }
-        }, 300);
+        }, 500);
       }
     };
 
     if (!isRecognitionActive) {
-      try {
-        sharedRecognition.start();
-        isRecognitionActive = true;
-        activeRef.current = true;
-      } catch (e) {
-        console.error('Failed to start recognition:', e);
-      }
+      try { sharedRecognition.start(); isRecognitionActive = true; activeRef.current = true; } catch (e) {}
     } else {
       activeRef.current = true;
     }
-  }, [isBlind, isVoiceActive, processCommand, speak]);
+  }, [isBlind, isVoiceActive, processCommand, aiListening]);
 
   const stopGlobalListening = useCallback(() => {
     activeRef.current = false;
     if (sharedRecognition && isRecognitionActive) {
-      try {
-        sharedRecognition.stop();
-        isRecognitionActive = false;
-      } catch (e) {}
+      try { sharedRecognition.stop(); isRecognitionActive = false; } catch (e) {}
     }
   }, []);
 
-  // Auto-announce sidebar on first load
-  useEffect(() => {
-    if (isBlind && isVoiceActive && !menuAnnouncedRef.current) {
-      const timer = setTimeout(() => {
-        announceSidebar();
-        menuAnnouncedRef.current = true;
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [isBlind, isVoiceActive, announceSidebar]);
+  const readPageContent = useCallback(() => {
+    const mainText = document.querySelector('main')?.innerText || '';
+    speak(mainText.slice(0, 1000));
+  }, [speak]);
 
-  // Start/stop listening
   useEffect(() => {
     if (isBlind && isVoiceActive) {
-      const timer = setTimeout(startGlobalListening, 2000);
-      return () => {
-        clearTimeout(timer);
-        stopGlobalListening();
-      };
+      startGlobalListening();
+      return () => stopGlobalListening();
     }
-    return () => {};
   }, [isBlind, isVoiceActive, startGlobalListening, stopGlobalListening]);
 
-  // Auto-read page content on route change
-  useEffect(() => {
-    if (isBlind && isVoiceActive) {
-      const timer = setTimeout(() => {
-        readPageContent();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isBlind, isVoiceActive, location.pathname, readPageContent]);
-
-  // Auto-read hovered elements
+  // Hover-to-Speak (Sangat membantu Tunanetra)
   useEffect(() => {
     if (!isBlind || !isVoiceActive) return;
-
     const handleHover = (e) => {
-      const target = e.target.closest('button, a, h1, h2, h3, h4, p, span, [aria-label], [title]');
+      const target = e.target.closest('button, a, h1, h2, h3, p');
       if (target) {
-        let text = target.getAttribute('aria-label') || target.getAttribute('title') || target.innerText;
-        text = text?.trim();
-        if (text && text !== lastSpokenRef.current && text.length < 200) {
+        const text = target.innerText || target.getAttribute('aria-label');
+        if (text && text !== lastSpokenRef.current) {
           speak(text);
           lastSpokenRef.current = text;
         }
       }
     };
-
     window.addEventListener('mouseover', handleHover);
-    return () => {
-      window.removeEventListener('mouseover', handleHover);
-      lastSpokenRef.current = '';
-    };
+    return () => window.removeEventListener('mouseover', handleHover);
   }, [isBlind, isVoiceActive, speak]);
 
-  return { speak, isActive: isBlind && isVoiceActive };
+  return {
+    speak,
+    startAIMicrophone,
+    stopAIMicrophone,
+    aiListening,
+    aiTranscript
+  };
 }

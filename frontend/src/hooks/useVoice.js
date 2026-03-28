@@ -1,68 +1,58 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 
-// Singleton instance to prevent multiple recognition objects interfering with each other
+// Singleton instance for Speech Recognition
 let sharedRecognition = null;
 
 export function useVoice() {
   const [isListening, setIsListening] = useState(false)
-  const [isSpeaking, setIsSpeaking] = useState(false)
-  const [hasInteracted, setHasInteracted] = useState(false)
-
-  const synthesisRef = useRef(window.speechSynthesis)
-  const audioCtxRef = useRef(null)
   const isMounted = useRef(true)
 
-  const getAudioContext = useCallback(() => {
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    }
-    return audioCtxRef.current;
-  }, []);
-
-  const unlockAudio = useCallback(() => {
-    // Disabled
-  }, []);
+  // Use a global flag to check if voice should be active
+  // This is a safety measure to ensure no voice runs on login/register/landing
+  const isPublicPage = ['/auth', '/login', '/register', '/'].includes(window.location.pathname);
 
   useEffect(() => {
-    // Recognition logic kept for possible voice command features,
-    // but sound output is being disabled as per request.
-    if (!sharedRecognition) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitRecognition;
-      if (SpeechRecognition) {
-        sharedRecognition = new SpeechRecognition();
-        sharedRecognition.continuous = true;
-        sharedRecognition.interimResults = true;
-        sharedRecognition.lang = 'id-ID';
-      }
-    }
-
     return () => {
       isMounted.current = false;
+      // Cleanup any pending speech on unmount
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     };
   }, []);
 
   const playSound = useCallback((type = 'click') => {
-    // Perbaikan: Hapus/Nonaktifkan semua sound effect
+    // Sound disabled globally for now as per previous instruction
     return;
   }, []);
 
   const startListening = useCallback((onResult) => {
-    if (!sharedRecognition) return;
-    try { sharedRecognition.stop(); } catch(e) {}
+    if (isPublicPage) return; // Block on public pages
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    if (!sharedRecognition) {
+      sharedRecognition = new SpeechRecognition();
+      sharedRecognition.continuous = false;
+      sharedRecognition.interimResults = false;
+      sharedRecognition.lang = 'id-ID';
+    }
+
     setIsListening(true);
     sharedRecognition.onresult = (event) => {
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
-      }
-      if (finalTranscript && onResult) onResult(finalTranscript);
+      const transcript = event.results[0][0].transcript;
+      if (onResult) onResult(transcript);
     };
-    sharedRecognition.onerror = () => setIsListening(false);
     sharedRecognition.onend = () => setIsListening(false);
-    setTimeout(() => {
-        try { sharedRecognition.start(); } catch(e) {}
-    }, 100);
-  }, []);
+    sharedRecognition.onerror = () => setIsListening(false);
+
+    try {
+      sharedRecognition.start();
+    } catch (e) {
+      console.warn("Recognition already started");
+    }
+  }, [isPublicPage]);
 
   const stopListening = useCallback(() => {
     if (sharedRecognition) {
@@ -72,18 +62,39 @@ export function useVoice() {
   }, []);
 
   const speak = useCallback((text, rate = 1.1) => {
-    // Perbaikan: Hapus/Nonaktifkan semua fitur suara (TTS)
-    return;
+    // CRITICAL FIX: Block speech synthesis on public pages and if not explicitly called
+    if (isPublicPage || !text || !window.speechSynthesis) {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      return;
+    }
+
+    // Cancel any ongoing speech before starting new one
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'id-ID';
+    utterance.rate = rate;
+    utterance.pitch = 1.0;
+
+    // Safety check: only speak if the page is still active
+    if (isMounted.current) {
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [isPublicPage]);
+
+  const stopSpeaking = useCallback(() => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
   }, []);
 
   return {
     isListening,
-    isSpeaking: false,
+    isSpeaking: window.speechSynthesis ? window.speechSynthesis.speaking : false,
     speak,
     playSound,
-    hasInteracted: true,
     startListening,
     stopListening,
-    stopSpeaking: () => {}
+    stopSpeaking
   }
 }
