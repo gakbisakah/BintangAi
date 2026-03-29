@@ -35,6 +35,7 @@ const StudentTaskDetail = () => {
 
   const isBlind = profile?.disability_type === 'tunanetra';
   const isDeaf = profile?.disability_type === 'tunarungu';
+  const isMute = profile?.disability_type === 'tunawicara';
 
   const handleVoiceCommand = useCallback((t) => {
     if (!started) {
@@ -328,10 +329,24 @@ const StudentTaskDetail = () => {
         <AnimatePresence mode="wait">
           {!started ? (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <div className="bg-white p-12 md:p-20 rounded-[4rem] shadow-sm border border-slate-100 mb-12">
+                <div className="bg-white p-12 md:p-20 rounded-[4rem] shadow-sm border border-slate-100 mb-12 relative overflow-hidden">
                   <h2 className="text-5xl font-black text-slate-900 uppercase mb-6 tracking-tighter">{task?.title}</h2>
                   <p className="text-xl text-slate-500 font-bold mb-10">{task?.description || 'Siapkan dirimu!'}</p>
-                  <button onClick={handleStart} className="px-20 py-8 bg-indigo-600 text-white rounded-[2.5rem] font-black text-xl uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">Mulai 🚀</button>
+
+                  {isMute && (
+                    <div className="mb-10 p-6 bg-indigo-50 rounded-[2.5rem] border-2 border-indigo-100 flex flex-col items-center gap-4">
+                       <span className="text-4xl animate-bounce">✌️</span>
+                       <p className="text-sm font-black text-indigo-600 uppercase tracking-widest text-center">Panduan Tunawicara: Tunjukkan 2 Jari ke Kamera untuk Mulai</p>
+                    </div>
+                  )}
+
+                  <button
+                    onClick={handleStart}
+                    data-gesture-item="true"
+                    className="px-20 py-8 bg-indigo-600 text-white rounded-[2.5rem] font-black text-xl uppercase tracking-widest hover:scale-105 transition-all shadow-2xl"
+                  >
+                    Mulai 🚀
+                  </button>
                 </div>
             </motion.div>
           ) : (
@@ -340,11 +355,30 @@ const StudentTaskDetail = () => {
                  <div key={q.id} className="space-y-8">
                     <div className="bg-white p-8 md:p-16 rounded-[4rem] shadow-sm border border-slate-100 relative min-h-[400px]">
                        <span className="absolute top-8 left-8 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-[10px] font-black uppercase">Soal {idx + 1} / {questions.length}</span>
+
                        <h3 className="text-3xl font-black text-slate-800 mt-10 mb-12">{q.question_text}</h3>
+
+                       {isMute && (
+                         <div className="mb-8 grid grid-cols-4 gap-4 p-4 bg-slate-50 rounded-[2rem] border border-slate-100">
+                            {[
+                              { jari: '☝️', label: 'Opsi A' },
+                              { jari: '✌️', label: 'Opsi B' },
+                              { jari: '🤘', label: 'Opsi C' },
+                              { jari: '🖖', label: 'Opsi D' },
+                            ].map((p, pi) => (
+                              <div key={pi} className="flex flex-col items-center gap-1">
+                                 <span className="text-2xl">{p.jari}</span>
+                                 <span className="text-[8px] font-black text-slate-400 uppercase">{p.label}</span>
+                              </div>
+                            ))}
+                         </div>
+                       )}
+
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {q.assignment_question_options?.map((opt, oi) => (
                                 <button
                                     key={opt.id}
+                                    data-gesture-item="true"
                                     onClick={() => handleAnswerChoice(oi)}
                                     className={`p-6 rounded-[2rem] border-2 text-left flex items-center gap-4 transition-all ${answers[q.id]?.selected_option_id === opt.id ? 'bg-indigo-600 border-indigo-600 text-white shadow-xl' : 'bg-white border-slate-100 hover:border-indigo-200'}`}
                                 >
@@ -357,7 +391,11 @@ const StudentTaskDetail = () => {
                        </div>
                     </div>
                     <div className="flex justify-center">
-                        <button onClick={handleNext} className="px-12 py-5 bg-indigo-600 text-white rounded-3xl font-black uppercase text-sm border-b-4 border-indigo-800 hover:bg-indigo-700 transition-all shadow-lg active:translate-y-1">
+                        <button
+                          onClick={handleNext}
+                          data-gesture-item="true"
+                          className="px-12 py-5 bg-indigo-600 text-white rounded-3xl font-black uppercase text-sm border-b-4 border-indigo-800 hover:bg-indigo-700 transition-all shadow-lg active:translate-y-1"
+                        >
                           {currentStep === questions.length ? "Selesaikan Quiz 🏁" : "Lanjut ➡️"}
                         </button>
                     </div>
