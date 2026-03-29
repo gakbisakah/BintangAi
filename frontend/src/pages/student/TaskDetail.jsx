@@ -24,8 +24,10 @@ const StudentTaskDetail = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(null);
+  const [initialDuration, setInitialDuration] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submissionRecord, setSubmissionRecord] = useState(null);
+  const [submissionDetails, setSubmissionDetails] = useState([]);
   const [avatarState, setAvatarState] = useState('idle');
   const [showConfetti, setShowConfetti] = useState(false);
   const [error, setError] = useState(null);
@@ -69,11 +71,17 @@ const StudentTaskDetail = () => {
       const { data: taskData } = await supabase.from('assignments').select('*, modules(title)').eq('id', id).maybeSingle();
       if (!taskData) return;
       setTask(taskData);
-      setTimeLeft(taskData.duration_minutes * 60 || 1800);
+      const duration = taskData.duration_minutes * 60 || 1800;
+      setTimeLeft(duration);
+      setInitialDuration(duration);
       const { data: qs } = await supabase.from('assignment_questions').select('*, assignment_question_options(*)').eq('assignment_id', id).order('order_index', { ascending: true });
       setQuestions(qs || []);
       const { data: existingSub } = await supabase.from('submissions').select('*').eq('assignment_id', id).eq('student_id', profile?.id).maybeSingle();
-      if (existingSub) setSubmissionRecord(existingSub);
+      if (existingSub) {
+        setSubmissionRecord(existingSub);
+        const { data: ansDetails } = await supabase.from('submission_answers').select('*, assignment_questions(question_text, assignment_question_options(*))').eq('submission_id', existingSub.id);
+        setSubmissionDetails(ansDetails || []);
+      }
     } catch (err) {} finally { setLoading(false); }
   };
 
@@ -89,6 +97,10 @@ const StudentTaskDetail = () => {
     const opt = q.assignment_question_options[index];
     if (!opt) return;
     setAnswers({ ...answers, [q.id]: { selected_option_id: opt.id } });
+
+    // Feedback visual cepat untuk tunarungu
+    if (isDeaf) showSubtitle(`Memilih: ${String.fromCharCode(65 + index)}`, 'info');
+
     setTimeout(handleNext, 1200);
   };
 
@@ -96,7 +108,9 @@ const StudentTaskDetail = () => {
     if (currentStep < questions.length) {
         setCurrentStep(prev => prev + 1);
         hasAnnouncedQuestion.current = false;
-    } else { handleSubmit(); }
+    } else {
+        handleSubmit();
+    }
   };
 
   const handleSubmit = async () => {
@@ -104,25 +118,183 @@ const StudentTaskDetail = () => {
     setSubmitting(true);
     try {
       let totalScore = 0;
+      let correctCount = 0;
+      const wrongQuestions = [];
+
       const questionResults = questions.map(q => {
         const ans = answers[q.id] || {};
         const correctOpt = q.assignment_question_options?.find(o => o.is_correct);
         const isCorrect = ans.selected_option_id === correctOpt?.id;
-        totalScore += isCorrect ? (q.points || 10) : 0;
+        if (isCorrect) {
+          totalScore += (q.points || 10);
+          correctCount += 1;
+        } else {
+          // Kumpulkan soal yang salah untuk analisis kelemahan
+          wrongQuestions.push({
+            question: q.question_text,
+            answer: q.assignment_question_options?.find(o => o.id === ans.selected_option_id)?.option_text || ""
+          });
+        }
         return { question_id: q.id, selected_option_id: ans.selected_option_id, is_correct: isCorrect };
       });
-      const { data: sub } = await supabase.from('submissions').insert({
-        assignment_id: id, student_id: profile.id, status: 'graded', total_score: totalScore, submitted_at: new Date().toISOString()
+
+      // 1. HITUNG XP REALTIME
+      const xpGained = correctCount * 20;
+      const { data: currentProfile } = await supabase.from('profiles').select('xp, weak_topics').eq('id', profile.id).single();
+      const currentXP = currentProfile?.xp || 0;
+      const existingWeakTopics = currentProfile?.weak_topics || [];
+
+      // 2. ANALISIS KELEMAHAN (AI WEAK TOPIC DETECTION)
+      // Kita panggil Edge Function untuk mendeteksi topik dari soal-soal yang salah
+      if (wrongQuestions.length > 0) {
+        try {
+          // Gabungkan teks soal yang salah untuk deteksi topik
+          const wrongText = wrongQuestions.map(wq => `${wq.question} ${wq.answer}`).join(" ");
+
+          const { data: detectResult } = await supabase.functions.invoke('weak-topics', {
+            body: { action: "detect", question: wrongText, answer: "" },
+            headers: { 'x-api-key': 'christian' }
+          });
+
+          if (detectResult?.topics && detectResult.topics.length > 0) {
+            // Gabungkan dengan topik lemah yang sudah ada (Set untuk unik)
+            const newWeakTopics = Array.from(new Set([...existingWeakTopics, ...detectResult.topics]));
+
+            // Simpan ke database
+            await supabase.from('profiles').update({ weak_topics: newWeakTopics }).eq('id', profile.id);
+          }
+        } catch (detectErr) {
+          console.error("Gagal deteksi topik lemah:", detectErr);
+        }
+      }
+
+      // 3. Simpan Submission
+      const { data: sub, error: subError } = await supabase.from('submissions').insert({
+        assignment_id: id,
+        student_id: profile.id,
+        status: 'graded',
+        total_score: totalScore,
+        submitted_at: new Date().toISOString(),
+        started_at: new Date(Date.now() - (initialDuration - timeLeft) * 1000).toISOString()
       }).select().single();
+
+      if (subError) throw subError;
+
+      // 4. Simpan Detail Jawaban
       await supabase.from('submission_answers').insert(questionResults.map(res => ({ ...res, submission_id: sub.id })));
+
+      // 5. UPDATE XP SECARA MANUAL
+      await supabase.from('profiles').update({ xp: currentXP + xpGained }).eq('id', profile.id);
+
+      // 6. Masukkan ke log XP
+      if (xpGained > 0) {
+        await supabase.from('xp_logs').insert({
+           student_id: profile.id,
+           action: `Selesai Quiz: ${task?.title}`,
+           xp_gained: xpGained
+        });
+      }
+
+      // 7. Refresh state lokal agar Dashboard & Peta Kelemahan terupdate
+      await fetchProfile(profile.id);
+
       setShowConfetti(true);
       setSubmissionRecord(sub);
+
+      const { data: ansDetails } = await supabase.from('submission_answers').select('*, assignment_questions(question_text, assignment_question_options(*))').eq('submission_id', sub.id);
+      setSubmissionDetails(ansDetails || []);
+
       setStarted(false);
-      fetchProfile(profile.id);
-    } catch (err) {} finally { setSubmitting(false); }
+    } catch (err) {
+      console.error("Gagal mengirim quiz:", err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m} menit ${s} detik`;
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center font-black text-slate-400">Memuat...</div>;
+
+  if (submissionRecord) {
+    const timeSpent = submissionRecord.submitted_at ?
+      Math.floor((new Date(submissionRecord.submitted_at) - new Date(submissionRecord.started_at)) / 1000) : 0;
+
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center p-6 pt-12 overflow-y-auto pb-32">
+        <ConfettiEffect active={showConfetti} />
+        <span className="text-8xl mb-4">🏆</span>
+        <h2 className="font-black text-slate-900 text-4xl mb-2 uppercase text-center">Hasil Quiz</h2>
+        <p className="text-slate-500 font-bold mb-8 uppercase tracking-widest text-center">{task?.title}</p>
+
+        <div className="w-full max-w-2xl bg-indigo-50 rounded-[3rem] p-10 border-4 border-indigo-100 mb-12 text-center relative overflow-hidden shadow-xl">
+          <div className="relative z-10">
+            <p className="text-sm font-black text-indigo-400 uppercase tracking-widest mb-1">Skor Akhir</p>
+            <p className="text-9xl font-black text-indigo-600 mb-6">{submissionRecord.total_score}</p>
+            <div className="grid grid-cols-2 gap-4 mb-6">
+               <div className="bg-white p-4 rounded-2xl border border-indigo-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Status</p>
+                  <p className="font-black text-indigo-600 uppercase text-sm">{submissionRecord.status}</p>
+               </div>
+               <div className="bg-white p-4 rounded-2xl border border-indigo-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Durasi Kerja</p>
+                  <p className="font-black text-indigo-600 text-sm">{formatTime(timeSpent)}</p>
+               </div>
+            </div>
+            <p className="text-slate-600 font-black uppercase text-sm bg-white/50 py-3 rounded-2xl border border-indigo-100/50">
+              ❓ {questions.length} Total Soal
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full max-w-2xl space-y-6 mb-16">
+           <h3 className="text-2xl font-black text-slate-800 uppercase tracking-tight border-l-8 border-indigo-600 pl-4 mb-8">Analisis Soal</h3>
+           {submissionDetails.map((detail, idx) => {
+              const qText = detail.assignment_questions?.question_text;
+              const options = detail.assignment_questions?.assignment_question_options || [];
+              const selectedOpt = options.find(o => o.id === detail.selected_option_id);
+              const correctOpt = options.find(o => o.is_correct);
+
+              return (
+                <div key={detail.id} className={`p-8 rounded-[2.5rem] border-4 ${detail.is_correct ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'}`}>
+                   <div className="flex justify-between items-start mb-4">
+                      <span className="text-[10px] font-black uppercase text-slate-400">Soal {idx + 1}</span>
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${detail.is_correct ? 'bg-emerald-200 text-emerald-700' : 'bg-rose-200 text-rose-700'}`}>
+                         {detail.is_correct ? 'Benar ✅' : 'Salah ❌'}
+                      </span>
+                   </div>
+                   <p className="font-black text-slate-800 text-lg mb-6 leading-tight">{qText}</p>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`p-4 rounded-2xl ${detail.is_correct ? 'bg-emerald-100/50' : 'bg-rose-100/50'}`}>
+                         <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Jawaban Kamu</p>
+                         <p className={`font-black ${detail.is_correct ? 'text-emerald-700' : 'text-rose-700'}`}>{selectedOpt?.option_text || '-'}</p>
+                      </div>
+                      {!detail.is_correct && (
+                        <div className="p-4 bg-emerald-100/50 rounded-2xl">
+                           <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Jawaban Benar</p>
+                           <p className="font-black text-emerald-700">{correctOpt?.option_text}</p>
+                        </div>
+                      )}
+                   </div>
+                </div>
+              );
+           })}
+        </div>
+
+        <button
+          onClick={() => navigate('/student/tasks')}
+          className="w-full max-w-xs bg-slate-900 text-white font-black py-6 rounded-[2rem] shadow-2xl uppercase tracking-widest hover:bg-slate-800 hover:scale-105 active:scale-95 transition-all mb-10"
+        >
+          Selesai & Kembali
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans relative">
@@ -170,15 +342,25 @@ const StudentTaskDetail = () => {
                             ))}
                        </div>
                     </div>
-                    {/* TOMBOL KEMBALI SEBAGAI ITEM KE-5 */}
+                    {/* TOMBOL KONTROL DI BAWAH SOAL */}
                     <div className="flex justify-center">
-                        <button
-                          onClick={() => setStarted(false)}
-                          data-gesture-item="true"
-                          className="px-10 py-4 bg-rose-50 text-rose-600 rounded-2xl font-black uppercase text-xs border-2 border-rose-100 hover:bg-rose-100 transition-all"
-                        >
-                          ⬅️ Kembali
-                        </button>
+                        {isDeaf ? (
+                          <button
+                            onClick={handleNext}
+                            data-gesture-item="true"
+                            className="px-12 py-5 bg-indigo-600 text-white rounded-3xl font-black uppercase text-sm border-b-4 border-indigo-800 hover:bg-indigo-700 transition-all shadow-lg active:translate-y-1"
+                          >
+                            {currentStep === questions.length ? "Selesaikan Quiz & Kirim 🏁" : "Lanjut ke Soal Berikutnya ➡️"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setStarted(false)}
+                            data-gesture-item="true"
+                            className="px-10 py-4 bg-rose-50 text-rose-600 rounded-2xl font-black uppercase text-xs border-2 border-rose-100 hover:bg-rose-100 transition-all"
+                          >
+                            ⬅️ Kembali
+                          </button>
+                        )}
                     </div>
                  </div>
                ))}
