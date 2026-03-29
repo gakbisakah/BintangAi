@@ -6,9 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="eda5c7ed-3599-4636-bcf6-9682598eb62c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useAI.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useAI.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/supabase/functions/generate-quiz/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/supabase/functions/generate-quiz/index.ts" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/pages/teacher/CreateTask.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/teacher/CreateTask.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/teacher/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/teacher/Dashboard.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

@@ -8,22 +8,16 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   try {
-    // 1. Verifikasi Otorisasi Custom (x-api-key)
     const clientApiKey = req.headers.get("x-api-key");
     const serverApiKey = Deno.env.get("x-api-key");
 
     if (!clientApiKey || clientApiKey !== serverApiKey) {
-      console.error("Unauthorized access attempt");
-      return new Response(JSON.stringify({
-        success: false,
-        message: "Akses tidak diizinkan (Invalid x-api-key)."
-      }), {
+      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
@@ -41,54 +35,50 @@ serve(async (req) => {
       duration_minutes
     } = body;
 
-    // 2. Ambil GROQ_API_KEY dari Env
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-
     if (!GROQ_API_KEY) {
-      return new Response(JSON.stringify({
-        success: false,
-        message: "Konfigurasi GROQ_API_KEY tidak ditemukan di server."
-      }), {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+      throw new Error("GROQ_API_KEY not configured");
     }
 
     const numQuestions = Math.min(parseInt(total_questions) || 5, 15);
-    const types = Array.isArray(question_types) ? question_types : ["multiple_choice"];
+    const difficultyText = difficulty === 'hard' ? 'Sangat Sulit' : difficulty === 'medium' ? 'Sedang' : 'Mudah';
 
-    const hasPG = types.includes("multiple_choice");
-    const hasEssay = types.includes("essay");
+    const systemPrompt = `Kamu adalah Kak Bintang, asisten guru SD yang ceria dan cerdas.
+    Tugasmu adalah membuat soal latihan berkualitas tinggi untuk siswa SD.
 
-    let mcCount = 0;
-    let essayCount = 0;
-
-    if (hasPG && hasEssay) {
-      mcCount = Math.floor(numQuestions * 0.7);
-      essayCount = numQuestions - mcCount;
-    } else if (hasPG) {
-      mcCount = numQuestions;
-    } else {
-      essayCount = numQuestions;
-    }
-
-    const systemPrompt = `Kamu adalah Kak Bintang, asisten guru SD yang cerdas. Berikan output JSON murni.`;
+    PERATURAN PENTING:
+    1. Output HARUS dalam format JSON murni.
+    2. Setiap soal WAJIB memiliki 'feedback_correct' dan 'feedback_wrong'.
+    3. 'feedback_correct' berisi pujian dan penjelasan singkat MENGAPA jawaban itu benar.
+    4. 'feedback_wrong' berisi kata-kata penyemangat dan PETUNJUK atau CARA mengerjakan agar siswa bisa mencoba lagi dengan benar.
+    5. Gunakan bahasa yang ramah anak SD.`;
 
     const userPrompt = `Buatkan ${numQuestions} soal tentang "${topic}" untuk kelas ${grade_level} SD.
-    Kesulitan: ${difficulty}. Komposisi: ${mcCount} PG, ${essayCount} Esai.
-    JSON Format:
+    Tingkat Kesulitan: ${difficultyText}.
+    Tipe Soal: ${question_types.join(", ")}.
+
+    JSON Structure:
     {
-      "quiz_title": "${(title || `Latihan ${topic}`).replace(/"/g, "'")}",
-      "instructions": "${(instructions || "Kerjakan dengan teliti.").replace(/"/g, "'")}",
+      "quiz_title": "${title || `Latihan ${topic}`}",
+      "instructions": "${instructions || "Selamat mengerjakan, tetap semangat!"}",
       "duration_minutes": ${duration_minutes || 30},
       "questions": [
         {
           "type": "multiple_choice",
           "question": "...",
-          "options": ["...", "...", "...", "..."],
+          "options": ["opsi A", "opsi B", "opsi C", "opsi D"],
           "correct_answer_index": 0,
-          "explanation": "...",
+          "feedback_correct": "Luar biasa! Penjelasannya: ...",
+          "feedback_wrong": "Jangan menyerah! Coba ingat kembali bahwa ...",
           "points": 10
+        },
+        {
+          "type": "essay",
+          "question": "...",
+          "correct_answer": "kunci jawaban singkat",
+          "feedback_correct": "Hebat sekali! Kamu benar karena ...",
+          "feedback_wrong": "Hampir tepat! Tipsnya: Perhatikan bagian ...",
+          "points": 20
         }
       ]
     }`;
@@ -105,15 +95,10 @@ serve(async (req) => {
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.3,
+        temperature: 0.4,
         response_format: { type: "json_object" }
       }),
     });
-
-    if (!groqResponse.ok) {
-      const errorData = await groqResponse.json();
-      throw new Error(`Groq API Error: ${errorData.error?.message || "Gagal ke AI"}`);
-    }
 
     const data = await groqResponse.json();
     const content = data.choices[0]?.message?.content;

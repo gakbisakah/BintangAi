@@ -63,13 +63,32 @@ const TeacherCreateTask = () => {
     try {
       const selectedSub = subjects.find(s => s.id === aiConfig.subject);
       let finalTopic = aiConfig.topic.trim() || selectedSub?.name || 'Umum';
-      const response = await generateAIQuiz({ topic: finalTopic, grade_level: aiConfig.gradeLevel, question_types: aiConfig.types, total_questions: aiConfig.count, difficulty: aiConfig.difficulty, title: taskData.title, instructions: taskData.description, duration_minutes: parseInt(taskData.duration) || 30 });
+      const response = await generateAIQuiz({
+        topic: finalTopic,
+        grade_level: aiConfig.gradeLevel,
+        question_types: aiConfig.types,
+        total_questions: aiConfig.count,
+        difficulty: aiConfig.difficulty,
+        title: taskData.title,
+        instructions: taskData.description,
+        duration_minutes: parseInt(taskData.duration) || 30
+      });
       if (response?.success && response.quiz) {
         const quiz = response.quiz.quiz || response.quiz;
         setTaskData(prev => ({ ...prev, title: prev.title || quiz.quiz_title || quiz.title, description: prev.description || quiz.instructions, duration: prev.duration || (quiz.duration_minutes || quiz.duration)?.toString() || '30' }));
         const formatted = (quiz.questions || []).map((q) => {
           const isPG = q.type === 'multiple_choice';
-          return { id: generateId(), type: isPG ? 'pilihan_ganda' : 'esai', text: q.question || q.text || '', points: q.points || (isPG ? 10 : 20), correctAnswer: isPG ? (q.options && q.correct_answer_index !== undefined ? q.options[q.correct_answer_index] : (q.correctText || '')) : (q.correct_answer || q.correct || ''), feedbackCorrect: q.explanation || q.feedback_correct || '', feedbackWrong: q.feedback_wrong || '', difficulty: aiConfig.difficulty, options: isPG ? (q.options || []).map((opt, i) => ({ id: generateId(), text: opt, isCorrect: i === (q.correct_answer_index ?? q.correct) })) : [] };
+          return {
+            id: generateId(),
+            type: isPG ? 'pilihan_ganda' : 'esai',
+            text: q.question || q.text || '',
+            points: q.points || (isPG ? 10 : 20),
+            correctAnswer: isPG ? (q.options && q.correct_answer_index !== undefined ? q.options[q.correct_answer_index] : (q.correctText || '')) : (q.correct_answer || q.correct || ''),
+            feedbackCorrect: q.feedback_correct || q.explanation || '',
+            feedbackWrong: q.feedback_wrong || '',
+            difficulty: aiConfig.difficulty,
+            options: isPG ? (q.options || []).map((opt, i) => ({ id: generateId(), text: opt, isCorrect: i === (q.correct_answer_index ?? q.correct) })) : []
+          };
         });
         setQuestions(formatted); setShowAIModal(false); alert(`✅ Berhasil!`);
       }
@@ -205,8 +224,12 @@ const TeacherCreateTask = () => {
                     {[1,2,3,4,5,6].map(g => <option key={g} value={g}>Kelas {g} SD</option>)}
                   </select>
                 </div>
-                <div className="space-y-1.5"><label className="text-[8px] font-black text-slate-400 uppercase ml-1">Jumlah</label>
-                  <input type="number" value={aiConfig.count} onChange={e => setAiConfig({...aiConfig, count: parseInt(e.target.value)})} className="w-full p-3 bg-slate-50 rounded-xl font-bold text-xs outline-none border-none" />
+                <div className="space-y-1.5"><label className="text-[8px] font-black text-slate-400 uppercase ml-1">Kesulitan</label>
+                  <select value={aiConfig.difficulty} onChange={e => setAiConfig({...aiConfig, difficulty: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold text-xs outline-none border-none">
+                    <option value="easy">Mudah</option>
+                    <option value="medium">Sedang</option>
+                    <option value="hard">Sangat Sulit</option>
+                  </select>
                 </div>
                 <div className="col-span-2 space-y-1.5"><label className="text-[8px] font-black text-slate-400 uppercase ml-1">Topik Spesifik</label>
                   <input type="text" value={aiConfig.topic} onChange={e => setAiConfig({...aiConfig, topic: e.target.value})} placeholder="Contoh: Perkalian, Ekosistem, dll" className="w-full p-3 bg-slate-50 rounded-xl font-bold text-xs outline-none border-none" />
