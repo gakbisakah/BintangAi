@@ -116,7 +116,8 @@ const Playground = () => {
     setAvatarState('thinking');
 
     try {
-      const response = await askTutor(query, weakTopics);
+      // FIX: Pass profile.id to askTutor
+      const response = await askTutor(query, profile.id, weakTopics);
       const answer = response.answer || 'Maaf, Kak Bintang sedang istirahat sebentar.';
       setMessages(prev => [...prev, { role: 'ai', text: answer, id: Date.now() + 1, timestamp: new Date() }]);
       setAvatarState('happy');
@@ -146,14 +147,6 @@ const Playground = () => {
                 </span>
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isBlind && (
-              <div className="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-xl text-xs font-black uppercase">
-                🎤 Mode Suara Aktif
-              </div>
-            )}
           </div>
         </header>
 
@@ -237,9 +230,6 @@ const Playground = () => {
                   </div>
                 )}
               </button>
-              <p className="text-sm font-black text-slate-500 uppercase tracking-[0.2em] text-center">
-                {isListening ? 'SEDANG MENDENGARKAN...' : 'Klik tombol di atas untuk bertanya'}
-              </p>
             </div>
           ) : (
             <div className="max-w-4xl mx-auto relative">

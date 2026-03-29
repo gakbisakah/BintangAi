@@ -1,12 +1,6 @@
 # Supabase configuration file
 project_id = "rnahdxukfyzifvsbhndu"
 
-# Environment variables untuk semua functions (global)
-# Ini akan otomatis tersedia di semua function saat dijalankan secara lokal
-[functions.environment]
-GROQ_API_KEY = "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"
-x-api-key = "christian"
-
 [functions.ai-tutor]
 verify_jwt = false
 
@@ -33,18 +27,12 @@ verify_jwt = false
 
 [functions.upload-pdf]
 verify_jwt = false
-[functions.upload-pdf.environment]
-SUPABASE_URL = "https://rnahdxukfyzifvsbhndu.supabase.co"
 
 [functions.get-parent-report]
 verify_jwt = false
-[functions.get-parent-report.environment]
-SUPABASE_URL = "https://rnahdxukfyzifvsbhndu.supabase.co"
 
 [functions.generate-parent-report-ai]
 verify_jwt = false
-[functions.generate-parent-report-ai.environment]
-SUPABASE_URL = "https://rnahdxukfyzifvsbhndu.supabase.co"
 
 [functions.generate-questions]
 verify_jwt = false

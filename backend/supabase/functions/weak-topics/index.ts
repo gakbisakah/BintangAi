@@ -7,7 +7,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
 };
 
-// Gunakan Service Role Key untuk bypass RLS agar penulisan ke profil siswa selalu berhasil
 const getAdminClient = () => {
   return createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
@@ -15,55 +14,49 @@ const getAdminClient = () => {
   );
 };
 
-function normalizeTopic(topic) {
-  return topic.toLowerCase().trim().replace(/[\[\]]/g, '');
-}
-
-// Fungsi deteksi yang lebih pintar (mencari tag AI atau kata kunci)
-function extractTopics(text) {
-  const topics = new Set();
-
-  // 1. Coba cari tag AI: <!--TOPICS:[topic1,topic2]-->
-  const aiTagMatch = text.match(/<!--TOPICS:\[(.*?)\]-->/);
-  if (aiTagMatch && aiTagMatch[1]) {
-    aiTagMatch[1].split(',').forEach(t => topics.add(normalizeTopic(t)));
-  }
-
-  // 2. Fallback ke deteksi kata kunci sederhana
-  const textLower = text.toLowerCase();
-  const keywords = {
-    "pecahan": ["pecahan", "per", "pembilang", "penyebut"],
-    "penjumlahan": ["tambah", "jumlah", "total"],
-    "pengurangan": ["kurang", "selisih", "sisa"],
-    "perkalian": ["kali", "perkalian"],
-    "pembagian": ["bagi", "pembagian"]
-  };
-
-  for (const [topic, words] of Object.entries(keywords)) {
-    if (words.some(w => textLower.includes(w))) {
-      topics.add(topic);
-    }
-  }
-
-  return Array.from(topics).slice(0, 5);
-}
-
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   try {
-    const { student_id, action, topics, question, answer } = await req.json();
+    const { student_id, action, question, answer, topics } = await req.json();
     const adminSupabase = getAdminClient();
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
 
     if (action === "detect") {
-      const detected = extractTopics(`${question} ${answer}`);
-      return new Response(JSON.stringify({ topics: detected }), { status: 200, headers: corsHeaders });
+      // Gunakan AI untuk mendeteksi topik dari soal yang salah
+      if (!GROQ_API_KEY) {
+        // Fallback ke keyword jika API key tidak ada
+        return new Response(JSON.stringify({ topics: ["Umum"] }), { status: 200, headers: corsHeaders });
+      }
+
+      const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [
+            {
+              role: "system",
+              content: "Kamu adalah asisten analisis pendidikan. Tugasmu mendeteksi 1 topik utama (max 2 kata) dari teks soal dan jawaban berikut. Balas HANYA dengan nama topiknya saja tanpa penjelasan apa pun. Contoh: 'Pecahan', 'Tata Surya', 'Fotosintesis'."
+            },
+            { role: "user", content: `Soal: ${question}\nJawaban Siswa: ${answer}` }
+          ],
+          temperature: 0.1,
+        }),
+      });
+
+      const aiData = await groqResponse.json();
+      const detectedTopic = aiData.choices?.[0]?.message?.content?.trim() || "Materi Umum";
+
+      return new Response(JSON.stringify({ topics: [detectedTopic] }), { status: 200, headers: corsHeaders });
     }
 
     if (action === "add") {
-      if (!student_id) throw new Error("student_id required");
+      if (!student_id || !topics) throw new Error("student_id and topics required");
 
-      // Ambil data lama
       const { data: profile } = await adminSupabase
         .from('profiles')
         .select('weak_topics')
@@ -71,7 +64,7 @@ serve(async (req) => {
         .single();
 
       const existingTopics = profile?.weak_topics || [];
-      const updatedTopics = Array.from(new Set([...existingTopics, ...topics]));
+      const updatedTopics = Array.from(new Set([...existingTopics, ...topics])).slice(-10);
 
       const { error: updateError } = await adminSupabase
         .from('profiles')
@@ -89,7 +82,7 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: "Invalid action" }), { status: 400, headers: corsHeaders });
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), {
-      status: 200, // Tetap return 200 agar frontend tidak crash, tapi sertakan error
+      status: 200,
       headers: corsHeaders
     });
   }

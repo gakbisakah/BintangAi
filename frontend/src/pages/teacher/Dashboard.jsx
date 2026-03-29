@@ -57,6 +57,44 @@ const TeacherDashboard = () => {
     }
   }, [profile, activeTab]);
 
+  // REALTIME SYNC - MONITORING TAB
+  useEffect(() => {
+    if (!profile?.class_code) return;
+
+    const channel = supabase
+      .channel('teacher_dashboard_sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+          filter: `class_code=eq.${profile.class_code}`
+        },
+        (payload) => {
+          console.log("Realtime Profile Change:", payload);
+          fetchStudents(); // Refresh data kelemahan
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'submissions'
+        },
+        () => {
+          fetchStats();
+          fetchStudents();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile?.class_code]);
+
   const fetchStats = async () => {
     setLoading(true);
     try {
@@ -117,17 +155,21 @@ const TeacherDashboard = () => {
 
       if (error) throw error;
 
+      // Realtime Weakness Calculation
       const topicCounts = {};
       data.forEach(s => {
         if (s.weak_topics && Array.isArray(s.weak_topics)) {
           s.weak_topics.forEach(t => {
-            topicCounts[t] = (topicCounts[t] || 0) + 1;
+            const normalized = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+            topicCounts[normalized] = (topicCounts[normalized] || 0) + 1;
           });
         }
       });
+
       const sortedTopics = Object.entries(topicCounts)
         .sort((a, b) => b[1] - a[1])
         .map(([name, count]) => ({ name, count }));
+
       setClassWeaknesses(sortedTopics);
 
       const processedStudents = data.map(s => {
@@ -236,24 +278,6 @@ const TeacherDashboard = () => {
     }
   };
 
-  const handleAllowRetake = async (submissionId, currentStatus) => {
-    try {
-      const { data, error } = await supabase.rpc('toggle_retake', {
-        target_submission_id: submissionId
-      });
-
-      if (error) throw error;
-
-      setAssignmentSubmissions(prev => prev.map(s =>
-        s.id === submissionId ? { ...s, allow_retake: data } : s
-      ));
-
-      alert(data ? "Siswa diizinkan mengerjakan ulang." : "Izin mengerjakan ulang dicabut.");
-    } catch (err) {
-      alert("Gagal memperbarui izin: " + err.message);
-    }
-  };
-
   const handleDeleteModule = async (moduleId) => {
     if (!window.confirm('Apakah Anda yakin ingin menghapus modul ini?')) return;
     setDeleteLoading(moduleId);
@@ -283,41 +307,29 @@ const TeacherDashboard = () => {
     }
   };
 
- // In TeacherDashboard component, update the generateReport function:
+  const generateReport = async (type, targetId) => {
+    if (type === 'Siswa' && !reportStudentId) {
+      alert("Pilih siswa terlebih dahulu!");
+      return;
+    }
 
- const generateReport = async (type, targetId) => {
-   if (type === 'Siswa' && !reportStudentId) {
-     alert("Pilih siswa terlebih dahulu!");
-     return;
-   }
+    setIsGeneratingReport(true);
+    try {
+      const target = type === 'Siswa' ? reportStudentId : targetId;
+      const studentName = students.find(s => s.id === target)?.full_name || 'Seluruh Kelas';
+      const result = await generateAndSaveReport(target, profile.id);
 
-   setIsGeneratingReport(true);
-   try {
-     const target = type === 'Siswa' ? reportStudentId : targetId;
-     const studentName = students.find(s => s.id === target)?.full_name || 'Seluruh Kelas';
-
-     console.log(`Generating report for ${type}:`, target);
-
-     // Generate dan Simpan Laporan
-     const result = await generateAndSaveReport(target, profile.id);
-
-     if (result.success) {
-       alert(`✅ Berhasil!\n\nLaporan untuk ${studentName} telah dibuat dan disimpan.\nOrang tua siswa dapat melihat laporan ini di aplikasi.`);
-
-       // Optional: Refresh student list or show the report
-       if (type === 'Siswa') {
-         // You can add logic to show the report preview here
-       }
-     } else {
-       throw new Error(result.message || "Gagal membuat laporan");
-     }
-   } catch (error) {
-     console.error("Generate report error:", error);
-     alert(`❌ Gagal membuat laporan: ${error.message}\n\nSilakan coba lagi atau hubungi tim teknis.`);
-   } finally {
-     setIsGeneratingReport(false);
-   }
- };
+      if (result.success) {
+        alert(`✅ Berhasil!\n\nLaporan untuk ${studentName} telah dibuat.\nOrang tua dapat melihatnya di aplikasi.`);
+      } else {
+        throw new Error(result.message || "Gagal membuat laporan");
+      }
+    } catch (error) {
+      alert(`❌ Gagal: ${error.message}`);
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans">
@@ -416,30 +428,63 @@ const TeacherDashboard = () => {
 
             {activeTab === 'monitoring' && (
               <motion.div key="monitoring" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+                {/* Realtime Weakness Section */}
                 <section className="bg-white p-10 rounded-[3.5rem] border border-slate-100 shadow-sm">
-                   <div className="flex items-center gap-4 mb-8">
-                      <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center text-xl">📉</div>
-                      <div>
-                        <h3 className="text-xl font-black text-slate-900 tracking-tight">Peta Kelemahan Kelas</h3>
-                        <p className="text-sm text-slate-400 font-medium">Topik yang paling banyak membingungkan siswa.</p>
+                   <div className="flex items-center justify-between mb-8">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center text-xl">📉</div>
+                        <div>
+                          <h3 className="text-xl font-black text-slate-900 tracking-tight">Peta Kelemahan Kelas (Realtime)</h3>
+                          <p className="text-sm text-slate-400 font-medium">Topik yang paling banyak membingungkan siswa.</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                         <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Live Updates</span>
                       </div>
                    </div>
-                   <div className="flex flex-wrap gap-4">
-                      {classWeaknesses.length > 0 ? classWeaknesses.map((topic, i) => (
-                        <div key={i} className="group relative">
-                           <div className={`px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${
-                             i === 0 ? 'bg-rose-600 text-white scale-110 shadow-lg shadow-rose-100' :
-                             i === 1 ? 'bg-rose-500 text-white' :
-                             i === 2 ? 'bg-rose-400 text-white' :
-                             'bg-slate-50 text-slate-400 border border-slate-100'
-                           }`}>
-                             {topic.name}
-                             <span className="ml-2 opacity-60">({topic.count})</span>
-                           </div>
-                        </div>
-                      )) : (
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-xs italic">Belum ada data kelemahan yang terdeteksi.</p>
-                      )}
+
+                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Distributions */}
+                      <div className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100">
+                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Distribusi Topik</h4>
+                         <div className="flex flex-wrap gap-4">
+                            {classWeaknesses.length > 0 ? classWeaknesses.map((topic, i) => (
+                              <div key={i} className={`px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${
+                                i === 0 ? 'bg-rose-600 text-white scale-110 shadow-lg' :
+                                i === 1 ? 'bg-rose-500 text-white' :
+                                'bg-white text-slate-400 border border-slate-100'
+                              }`}>
+                                {topic.name} <span className="opacity-60 ml-2">({topic.count})</span>
+                              </div>
+                            )) : (
+                              <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] italic">Belum ada kelemahan terdeteksi.</p>
+                            )}
+                         </div>
+                      </div>
+
+                      {/* Detail Per Siswa */}
+                      <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-inner overflow-y-auto max-h-[300px]">
+                         <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Detail Per Siswa</h4>
+                         <div className="space-y-3">
+                            {students.filter(s => s.weak_topics?.length > 0).map((s) => (
+                               <div key={s.id} className="p-4 bg-slate-50 rounded-2xl flex items-center justify-between">
+                                  <div>
+                                     <p className="font-black text-slate-800 text-sm">{s.full_name}</p>
+                                     <div className="flex flex-wrap gap-2 mt-2">
+                                        {s.weak_topics.map((t, i) => (
+                                           <span key={i} className="px-2 py-1 bg-rose-50 text-rose-500 rounded-lg text-[9px] font-black uppercase">{t}</span>
+                                        ))}
+                                     </div>
+                                  </div>
+                                  <span className="text-[8px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">🤖 AI Evaluated</span>
+                               </div>
+                            ))}
+                            {students.filter(s => s.weak_topics?.length > 0).length === 0 && (
+                               <p className="text-center text-slate-300 font-bold uppercase text-[10px] py-10">Menunggu data evaluasi...</p>
+                            )}
+                         </div>
+                      </div>
                    </div>
                 </section>
 
@@ -491,7 +536,7 @@ const TeacherDashboard = () => {
                     <div>
                       <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center text-2xl mb-6">👤</div>
                       <h4 className="text-xl font-black text-slate-900 mb-2">Laporan Per Siswa</h4>
-                      <p className="text-slate-500 text-sm leading-relaxed mb-8">Pilih siswa untuk generate laporan mendalam yang mencakup catatan AI dan rekomendasi khusus.</p>
+                      <p className="text-slate-500 text-sm leading-relaxed mb-8">Pilih siswa untuk generate laporan mendalam.</p>
                     </div>
                     <select
                       value={reportStudentId}
@@ -523,7 +568,6 @@ const TeacherDashboard = () => {
                           <h4 className="text-xl font-black text-slate-800">{a.title}</h4>
                           <div className="flex flex-wrap gap-3 mt-2">
                              <span className="px-3 py-1 bg-slate-50 text-slate-400 rounded-lg text-[10px] font-black uppercase tracking-widest">Deadline: {new Date(a.deadline).toLocaleDateString('id-ID')}</span>
-                             {a.short_id && <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-widest">ID: {a.short_id}</span>}
                           </div>
                        </div>
                     </div>

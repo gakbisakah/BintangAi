@@ -1,5 +1,5 @@
-// supabase/functions/ai-tutor/index.ts
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,98 +7,76 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+const getAdminClient = () => {
+  return createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
+};
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
 
   try {
-    // 1. Verifikasi Otorisasi (x-api-key)
-    // Sesuai config.toml Anda, kita gunakan 'x-api-key' yang bernilai 'christian'
-    const serverApiKey = Deno.env.get("x-api-key");
     const clientApiKey = req.headers.get("x-api-key");
+    const serverApiKey = Deno.env.get("CUSTOM_AI_TUTOR_KEY") || "christian";
 
-    if (!serverApiKey || clientApiKey !== serverApiKey) {
-      console.error("Unauthorized: API Key mismatch or missing");
-      return new Response(JSON.stringify({
-        error: "Unauthorized",
-        reply: "Waduh, kunci keamanan Kak Bintang salah nih! 🔒"
-      }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" }
-      });
+    if (!clientApiKey || clientApiKey !== serverApiKey) {
+      return new Response(JSON.stringify({ success: false, reply: "Akses ditolak. 🔒" }), { status: 401, headers: corsHeaders });
     }
 
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-    if (!GROQ_API_KEY) {
-      throw new Error("GROQ_API_KEY is missing in Supabase Secrets");
-    }
-
-    let body;
-    try {
-      body = await req.json();
-    } catch (e) {
-      throw new Error("Invalid JSON body");
-    }
-
-    // Mendukung 'message' (dari Playground) atau 'query'/'question' (dari TaskDetail)
-    const message = body.message || body.query || body.question;
+    const body = await req.json();
+    const message = body.message || body.query;
+    const student_id = body.student_id || body.user_id;
     const { nama = "Teman", kelas = 4, weak_topics = [] } = body;
 
-    if (!message) throw new Error("Message is required");
+    if (!message) return new Response(JSON.stringify({ success: false, reply: "Pesan kosong. 😊" }), { status: 400, headers: corsHeaders });
 
-    const systemPrompt = `Kamu adalah Kak BintangAi, tutor SD kelas 1-6 yang ceria dan sabar.
-    Nama siswa: ${nama}, Kelas: ${kelas}.
-    ${weak_topics.length > 0 ? `Bantu siswa dengan topik: ${weak_topics.join(", ")}.` : ""}
-    Jawab dengan bahasa yang mudah dimengerti anak SD, gunakan emoji, dan maksimal 3 kalimat.
-    Di akhir jawaban, sertakan tag topik: <!--TOPICS:topik_terkait-->`;
-
-    const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-    const response = await fetch(GROQ_URL, {
+    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
-        "Content-Type": "application/json"
-      },
+      headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "llama-3.1-8b-instant",
         messages: [
-          { role: "system", content: systemPrompt },
+          {
+            role: "system",
+            content: `Kamu adalah Kak BintangAi, tutor ramah SD. Nama: ${nama}, Kelas: ${kelas}.
+            Jika bertanya materi, akhiri dengan tag: [TOPIC: Nama Topik].`
+          },
           { role: "user", content: message }
         ],
-        max_tokens: 200,
-        temperature: 0.7
+        temperature: 0.6,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Groq error:", errorText);
-      throw new Error(`Groq API error: ${response.status}`);
+    const data = await groqResponse.json();
+    let aiReply = data.choices?.[0]?.message?.content || "Maaf, Kak Bintang sedang pusing. 😊";
+
+    let detectedTopic = null;
+    const topicMatch = aiReply.match(/\[TOPIC:\s*(.*?)\]/);
+    if (topicMatch) {
+      detectedTopic = topicMatch[1].trim();
+      aiReply = aiReply.replace(/\[TOPIC:.*?\]/, "").trim();
     }
 
-    const data = await response.json();
-    let reply = data.choices?.[0]?.message?.content || "Maaf, Kak Bintang lagi bingung. Coba tanya lagi ya! 😊";
-
-    // Pastikan ada tag topics jika AI lupa memberikan
-    if (!reply.includes("<!--TOPICS:")) {
-      reply += " <!--TOPICS:umum-->";
+    // ATOMIC & SCALABLE UPDATE menggunakan RPC
+    if (detectedTopic && student_id) {
+      const adminSupabase = getAdminClient();
+      // Menggunakan rpc 'add_weak_topic' yang lebih stabil untuk banyak pengguna sekaligus
+      await adminSupabase.rpc('add_weak_topic', {
+        target_user_id: student_id,
+        new_topic: detectedTopic
+      });
+      console.log(`Realtime Weak Topic Updated for ${student_id}: ${detectedTopic}`);
     }
 
-    return new Response(JSON.stringify({ reply, answer: reply }), {
+    return new Response(JSON.stringify({ success: true, reply: aiReply, detected_topic: detectedTopic }), {
       status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...corsHeaders, "Content-Type": "application/json" }
     });
 
   } catch (error: any) {
-    console.error("AI Tutor Error:", error.message);
-    return new Response(JSON.stringify({
-      reply: "Waduh, Kak BintangAi lagi istirahat sebentar. Coba tanya lagi ya! 😊",
-      answer: "Waduh, Kak BintangAi lagi istirahat sebentar. 😊",
-      debug: error.message
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ success: false, reply: "Terjadi kesalahan sistem. 😊" }), { status: 500, headers: corsHeaders });
   }
 });
