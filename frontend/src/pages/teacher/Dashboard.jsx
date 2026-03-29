@@ -71,9 +71,8 @@ const TeacherDashboard = () => {
           table: 'profiles',
           filter: `class_code=eq.${profile.class_code}`
         },
-        (payload) => {
-          console.log("Realtime Profile Change:", payload);
-          fetchStudents(); // Refresh data kelemahan
+        () => {
+          fetchStudents();
         }
       )
       .on(
@@ -155,7 +154,6 @@ const TeacherDashboard = () => {
 
       if (error) throw error;
 
-      // Realtime Weakness Calculation
       const topicCounts = {};
       data.forEach(s => {
         if (s.weak_topics && Array.isArray(s.weak_topics)) {
@@ -536,7 +534,7 @@ const TeacherDashboard = () => {
                     <div>
                       <div className="w-14 h-14 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center text-2xl mb-6">👤</div>
                       <h4 className="text-xl font-black text-slate-900 mb-2">Laporan Per Siswa</h4>
-                      <p className="text-slate-500 text-sm leading-relaxed mb-8">Pilih siswa untuk generate laporan mendalam.</p>
+                      <p className="text-slate-500 text-sm leading-relaxed mb-8">Pilih siswa untuk generate laporan mendalam yang mencakup catatan AI dan rekomendasi khusus.</p>
                     </div>
                     <select
                       value={reportStudentId}
@@ -568,6 +566,7 @@ const TeacherDashboard = () => {
                           <h4 className="text-xl font-black text-slate-800">{a.title}</h4>
                           <div className="flex flex-wrap gap-3 mt-2">
                              <span className="px-3 py-1 bg-slate-50 text-slate-400 rounded-lg text-[10px] font-black uppercase tracking-widest">Deadline: {new Date(a.deadline).toLocaleDateString('id-ID')}</span>
+                             {a.short_id && <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-widest">ID: {a.short_id}</span>}
                           </div>
                        </div>
                     </div>

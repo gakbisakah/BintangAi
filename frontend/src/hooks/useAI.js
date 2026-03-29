@@ -10,10 +10,9 @@ export const useAI = () => {
     setError(null);
 
     try {
-      // 1. Ambil data profil user untuk personalisasi
       const { data: profileData } = await supabase.from('profiles').select('full_name, class_code').eq('id', studentId).single();
       const nama = profileData?.full_name?.split(' ')[0] || "Teman";
-      const kelas = 4; // Default
+      const kelas = 4;
 
       const apiKey = import.meta.env.VITE_CUSTOM_AI_TUTOR_KEY;
 
@@ -49,6 +48,49 @@ export const useAI = () => {
     }
   };
 
+  const generateAIQuiz = async (config) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('generate-quiz', {
+        body: config,
+        headers: {
+          'x-api-key': 'christian'
+        }
+      });
+
+      if (invokeError) throw invokeError;
+      return { success: true, quiz: data };
+    } catch (err) {
+      console.error("Generate AI Quiz Error:", err);
+      return { success: false, message: err.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateManualFeedback = async (config) => {
+    setLoading(true);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke('weak-topics', {
+        body: { action: 'detect', ...config },
+        headers: { 'x-api-key': 'christian' }
+      });
+      if (invokeError) throw invokeError;
+
+      // Transform response to match expectation
+      return {
+        feedback_correct: `Bagus! Penjelasan: Ini adalah jawaban yang benar tentang ${data.topics?.[0] || 'materi ini'}.`,
+        feedback_wrong: `Kurang tepat. Coba pelajari lagi tentang ${data.topics?.[0] || 'topik ini'}.`
+      };
+    } catch (err) {
+      console.error("Generate Feedback Error:", err);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getWeakTopics = async (studentId) => {
     try {
       const { data } = await supabase.from('profiles').select('weak_topics').eq('id', studentId).single();
@@ -73,6 +115,8 @@ export const useAI = () => {
 
   return {
     askTutor,
+    generateAIQuiz,
+    generateManualFeedback,
     getWeakTopics,
     generateAndSaveReport,
     loading,

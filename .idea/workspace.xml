@@ -6,16 +6,8 @@
   <component name="ChangeListManager">
     <list default="true" id="eda5c7ed-3599-4636-bcf6-9682598eb62c" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/config.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/config.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/supabase/.temp/cli-latest" beforeDir="false" afterPath="$PROJECT_DIR$/backend/supabase/.temp/cli-latest" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/supabase/config.toml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/supabase/config.toml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/supabase/functions/ai-tutor/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/supabase/functions/ai-tutor/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/supabase/functions/weak-topics/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/backend/supabase/functions/weak-topics/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/.env" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/.env" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/hooks/useAI.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/hooks/useAI.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/lib/supabase.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/lib/supabase.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/Playground.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/Playground.jsx" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/src/pages/student/TaskDetail.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/student/TaskDetail.jsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/src/pages/teacher/CreateTask.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/teacher/CreateTask.jsx" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/frontend/src/pages/teacher/Dashboard.jsx" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/src/pages/teacher/Dashboard.jsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
